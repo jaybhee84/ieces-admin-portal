@@ -45,30 +45,45 @@ jobs:
           $exists = git tag -l $targetTag
           if ($exists) {
             [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exists=true`n")
-            Write-Host "Tag $targetTag already exists. Skipping release build."
+            Write-Host "Tag $targetTag already exists."
           } else {
             [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exists=false`n")
           }
 
-      - name: Install dependencies
-        if: steps.check_tag.outputs.exists == 'false'
-        run: npm ci
-
-      - name: Build Vite Frontend
-        if: steps.check_tag.outputs.exists == 'false'
-        run: npm run build
-
-      - name: Build and Publish Electron App
-        if: steps.check_tag.outputs.exists == 'false'
-        run: npx electron-builder --win --publish always
+      - name: Check if Release Already Exists
+        id: check_release
+        shell: powershell
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view $env:VERSION --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exists=true`n")
+            Write-Host "Release $env:VERSION already exists. Skipping release build."
+          } else {
+            [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exists=false`n")
+            Write-Host "Release $env:VERSION does not exist. Building and publishing it."
+          }
 
       - name: Push Git Tag
-        if: steps.check_tag.outputs.exists == 'false'
+        if: steps.check_release.outputs.exists == 'false' && steps.check_tag.outputs.exists == 'false'
         shell: powershell
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag $env:VERSION
           git push origin $env:VERSION
+
+      - name: Install dependencies
+        if: steps.check_release.outputs.exists == 'false'
+        run: npm ci
+
+      - name: Build Vite Frontend
+        if: steps.check_release.outputs.exists == 'false'
+        run: npm run build
+
+      - name: Build and Publish Electron App
+        if: steps.check_release.outputs.exists == 'false'
+        run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
