@@ -109,6 +109,7 @@ Deno.serve(async (request: Request) => {
     family_name: family_name?.trim() || "",
     first_name: first_name?.trim() || "",
     middle_initial: middle_initial?.trim() || null,
+    app_source: "report",
   });
 
   if (profileErr) {

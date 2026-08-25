@@ -14,6 +14,20 @@ import SchoolBulletinPage from "./pages/SchoolBulletinPage";
 import SplashScreen from "./components/SplashScreen";
 import "./App.css";
 
+async function setPresence(session, status) {
+  if (!session?.user?.id) return;
+  await supabase.from("user_presence").upsert(
+    {
+      user_id: session.user.id,
+      app_id: "report",
+      email: session.user.email || null,
+      status,
+      last_seen: new Date().toISOString(),
+    },
+    { onConflict: "user_id,app_id" },
+  );
+}
+
 // ── Toast Notification ──
 function Toast({ toasts, removeToast }) {
   return (
@@ -124,6 +138,20 @@ export default function App() {
       addToast(`Update error: ${error}`, "error", 4000);
     });
   }, []);
+
+  useEffect(() => {
+    if (!session) return undefined;
+    setPresence(session, "online");
+    const heartbeat = setInterval(() => setPresence(session, "online"), 60000);
+    const updateVisibility = () =>
+      setPresence(session, document.hidden ? "offline" : "online");
+    document.addEventListener("visibilitychange", updateVisibility);
+    return () => {
+      clearInterval(heartbeat);
+      document.removeEventListener("visibilitychange", updateVisibility);
+      setPresence(session, "offline");
+    };
+  }, [session]);
 
   // ── Auth Listener Setup ──
   useEffect(() => {

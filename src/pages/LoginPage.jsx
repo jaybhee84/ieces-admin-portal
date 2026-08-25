@@ -200,11 +200,10 @@ function RegisterForm({ onGoLogin }) {
     const normalizedEmail = form.email.trim().toLowerCase();
 
     // 1. Check report_allowed_users (set by Dashboard Manager)
-    const { data: allowed } = await supabase
-      .from("report_allowed_users")
-      .select("email")
-      .eq("email", normalizedEmail)
-      .maybeSingle();
+    const { data: allowed } = await supabase.rpc("is_app_email_allowed", {
+      app_key: "report",
+      candidate_email: normalizedEmail,
+    });
 
     if (!allowed) {
       setError("Email not authorized to register. Contact your administrator.");
