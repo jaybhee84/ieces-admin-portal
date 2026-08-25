@@ -10,6 +10,7 @@ import MooePage from "./pages/MooePage";
 import OrgChartPage from "./pages/OrgChartPage";
 import MediaManagerPage from "./pages/MediaManagerPage";
 import EnrollmentPage from "./pages/EnrollmentPage";
+import SchoolBulletinPage from "./pages/SchoolBulletinPage";
 import SplashScreen from "./components/SplashScreen";
 import "./App.css";
 
@@ -216,6 +217,14 @@ export default function App() {
 
       {page === "media-manager" && session && (
         <MediaManagerPage
+          onBack={() => setPage("dashboard")}
+          onLogout={handleLogout}
+          user={session?.user}
+          {...sharedProps}
+        />
+      )}
+      {page === "school-bulletin" && session && (
+        <SchoolBulletinPage
           onBack={() => setPage("dashboard")}
           onLogout={handleLogout}
           user={session?.user}

@@ -22,15 +22,20 @@
 .enrollment-table td { padding: 10px 12px; text-align: center; color: #695353; border-bottom: 1px solid #eee5e1; }
 .daily-table tbody tr { cursor: pointer; }
 .daily-table tbody tr:hover, .daily-table tbody tr.selected { background: #fff4e6; }
-.advisory-groups { display: grid; gap: 15px; }
+.advisory-groups { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: start; gap: 10px; }
 .advisory-grade-group { overflow: hidden; border: 1px solid #e3d4ce; border-radius: 10px; }
-.advisory-grade-heading { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; color: white; background: #7b1a1a; }
-.advisory-grade-heading h3 { margin: 0; font-size: .83rem; text-transform: uppercase; }.advisory-grade-heading span { font-size: .68rem; font-weight: 700; opacity: .85; }
-.adviser-list { background: #fff; }.adviser-row { display: flex; align-items: center; gap: 12px; min-height: 76px; padding: 10px 14px; border-bottom: 1px solid #eee5e1; cursor: pointer; }.adviser-row:last-child { border-bottom: 0; }.adviser-row:hover { background: #fff7ec; }.adviser-row.chairman { background: #fff9df; border-left: 4px solid #e2b628; }
-.adviser-row img, .adviser-avatar { width: 52px; height: 52px; flex: 0 0 52px; border-radius: 50%; object-fit: cover; }.adviser-avatar { display: grid; place-items: center; background: #eee5e1; }
-.adviser-identity { flex: 1; min-width: 0; }.adviser-identity strong, .adviser-identity span, .adviser-identity small { display: block; }.adviser-identity strong { color: #491919; font-size: .85rem; }.adviser-identity span { overflow: hidden; color: #7d6565; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }.adviser-identity small { margin-top: 2px; color: #9a8585; font-size: .63rem; }
-.chairman-badge { padding: 5px 9px; border-radius: 14px; color: #7a5600; background: #f9e58d; font-size: .63rem; font-weight: 800; }
-.adviser-total { min-width: 65px; text-align: center; }.adviser-total strong, .adviser-total span { display: block; }.adviser-total strong { color: #7b1a1a; font-size: 1.25rem; }.adviser-total span { color: #927979; font-size: .6rem; text-transform: uppercase; }
+.advisory-grade-heading { min-height: 54px; padding: 8px 9px; color: white; background: #7b1a1a; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.advisory-grade-heading h3 { margin: 0; font-size: .72rem; text-transform: uppercase; }.advisory-grade-heading span { font-size: .58rem; font-weight: 700; opacity: .85; }
+.adviser-list { background: #fff; }.adviser-row { position: relative; min-height: 66px; padding: 8px; border-bottom: 1px solid #eee5e1; cursor: pointer; display: grid; grid-template-columns: 34px minmax(0,1fr); align-items: center; gap: 3px 7px; }.adviser-row:last-child { border-bottom: 0; }.adviser-row:hover { background: #fff7ec; }.adviser-row.chairman { background: #fff9df; border-left: 3px solid #e2b628; }
+.adviser-row img, .adviser-avatar { grid-column: 1; grid-row: 1; width: 34px; height: 34px; border-radius: 50%; object-fit: cover; }.adviser-avatar { display: grid; place-items: center; background: #eee5e1; font-size: .8rem; }
+.adviser-identity { grid-column: 2; min-width: 0; }.adviser-identity strong, .adviser-identity span, .adviser-identity small { display: block; }.adviser-identity strong { overflow: hidden; color: #491919; font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }.adviser-identity span { overflow: hidden; color: #7d6565; font-size: .56rem; text-overflow: ellipsis; white-space: nowrap; }.adviser-identity small { margin-top: 1px; overflow: hidden; color: #9a8585; font-size: .54rem; text-overflow: ellipsis; white-space: nowrap; }
+.adviser-name-line { min-width: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 4px; }
+.adviser-identity .adviser-name-line > strong { min-width: 0; overflow: visible; text-overflow: clip; white-space: normal; line-height: 1.25; overflow-wrap: normal; word-break: normal; hyphens: none; }
+.adviser-identity .chairman-badge { width: fit-content; margin-top: 3px; padding: 2px 4px; border-radius: 8px; color: #7a5600; background: #f9e58d; font-size: .43rem; font-weight: 800; }
+.adviser-total { flex: 0 0 auto; display: flex; align-items: baseline; gap: 2px; text-align: right; }.adviser-total strong, .adviser-total span { display: inline; }.adviser-total strong { color: #7b1a1a; font-size: .76rem; }.adviser-total span { color: #927979; font-size: .42rem; text-transform: uppercase; }
+.adviser-sex-counts { margin-top: 4px; display: flex; gap: 7px; }
+.adviser-sex-counts span { color: #745f5f; font-size: .5rem; font-weight: 700; }
+.adviser-sex-counts span strong { display: inline; color: #7b1a1a; font-size: .54rem; }
 .adviser-empty { padding: 18px; color: #a08c8c; font-size: .72rem; font-style: italic; }
 .enrollment-table tfoot th { border-top: 2px solid #c9aaa0; }
 .grade-live-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
@@ -46,15 +51,72 @@
 .enrollment-message, .enrollment-empty { padding: 35px; text-align: center; color: #7a6060; background: white; border: 1px dashed #d9c9c3; border-radius: 12px; }
 .enrollment-message.error { color: #991b1b; background: #fff1f2; border-style: solid; }
 .roster-overlay { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 22px; background: rgba(30,10,10,.6); }
-.roster-modal { display: flex; flex-direction: column; width: min(1000px, 100%); max-height: 90vh; overflow: hidden; background: #f7f3f1; border-radius: 14px; box-shadow: 0 25px 80px rgba(0,0,0,.3); }
+.kinder-session-modal { width: min(520px, 100%); overflow: hidden; border-radius: 16px; background: #fff; box-shadow: 0 25px 80px rgba(0,0,0,.3); }
+.kinder-session-modal > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 22px; color: #fff; background: #7b1a1a; border-bottom: 3px solid #f5c518; }
+.kinder-session-modal header span { color: #fde68a; font-size: .64rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.kinder-session-modal header h2 { margin: 3px 0; font-size: 1.08rem; }
+.kinder-session-modal header p { margin: 0; color: rgba(255,255,255,.8); font-size: .72rem; }
+.kinder-session-modal header button { width: 32px; height: 32px; flex: 0 0 32px; border: 0; border-radius: 50%; color: white; background: rgba(255,255,255,.15); }
+.kinder-session-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 22px; }
+.kinder-session-card { min-height: 150px; padding: 18px; border: 2px solid #eadbd4; border-radius: 14px; color: #5a2020; background: #fffaf7; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: transform .15s, border-color .15s, box-shadow .15s; }
+.kinder-session-card:hover { transform: translateY(-2px); border-color: #d5a62a; box-shadow: 0 8px 24px rgba(123,26,26,.12); }
+.kinder-session-card > span { margin-bottom: 7px; font-size: 2rem; }
+.kinder-session-card strong { font-size: 1rem; }
+.kinder-session-card small { color: #8e7474; font-size: .66rem; text-transform: uppercase; }
+.kinder-session-card b { margin-top: 12px; padding: 4px 10px; border-radius: 999px; color: #7b1a1a; background: #f6e8e3; font-size: .7rem; }
+.kinder-session-card.morning { background: #fffbeb; }
+.kinder-session-card.afternoon { background: #fff7ed; }
+.roster-modal { display: flex; flex-direction: column; width: min(1280px, 100%); max-height: 90vh; overflow: hidden; background: #f7f3f1; border-radius: 14px; box-shadow: 0 25px 80px rgba(0,0,0,.3); }
 .roster-modal > header { display: flex; justify-content: space-between; align-items: center; padding: 18px 22px; color: white; background: #7b1a1a; border-bottom: 3px solid #f5c518; }
 .roster-modal header h2 { margin: 0 0 3px; font-size: 1.05rem; }.roster-modal header p { margin: 0; font-size: .72rem; opacity: .85; }
-.roster-modal header button { width: 32px; height: 32px; border: 0; border-radius: 50%; color: white; background: rgba(255,255,255,.15); cursor: pointer; }
+.roster-header-actions { display: flex; align-items: center; gap: 8px; }
+.roster-modal header button { border: 0; color: white; background: rgba(255,255,255,.15); cursor: pointer; }
+.roster-modal header button:hover { background: rgba(255,255,255,.25); }
+.roster-close { width: 32px; height: 32px; border-radius: 50%; }
+.roster-print { min-height: 32px; padding: 6px 12px; border-radius: 7px; font: inherit; font-size: .7rem; font-weight: 800; }
+.roster-adviser-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.roster-adviser-heading img, .roster-adviser-avatar { width: 52px; height: 52px; flex: 0 0 52px; border: 2px solid rgba(255,255,255,.75); border-radius: 50%; object-fit: cover; }
+.roster-adviser-avatar { display: grid; place-items: center; color: #6b4a4a; background: #f3e8e4; font-size: 1.25rem; }
 .roster-body { overflow-y: auto; padding: 18px; }
+.roster-table-wrap { overflow: auto; border: 1px solid #e1d3ce; border-radius: 10px; background: white; }
+.roster-table { width: 100%; min-width: 1180px; border-collapse: collapse; font-size: .72rem; }
+.roster-table th { position: sticky; top: 0; z-index: 1; padding: 11px 10px; color: #fff; background: #6b1717; text-align: left; white-space: nowrap; }
+.roster-table td { padding: 10px; color: #664f4f; border-bottom: 1px solid #eee5e1; vertical-align: top; }
+.roster-table tbody tr:last-child td { border-bottom: 0; }
+.roster-table tbody tr:nth-child(even) { background: #fcfaf9; }
+.roster-table tbody tr:hover { background: #fff7ec; }
+.roster-table td:nth-child(3) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.roster-table td strong { color: #421818; }
+.roster-number { width: 36px; color: #7b1a1a !important; font-weight: 800; text-align: center; }
+.roster-photo-cell { width: 48px; text-align: center; }
+.roster-photo-cell img { width: 36px; height: 36px; border: 1px solid #ddceca; border-radius: 50%; object-fit: cover; }
+.roster-table tfoot th { padding: 10px; color: #491919; background: #f4ece8; border-top: 2px solid #c9aaa0; text-align: right; }
+.nutrition-label { display: inline-block; padding: 3px 7px; border-radius: 999px; color: #315d12; background: #eaf3de; font-size: .64rem; font-weight: 800; white-space: nowrap; }
+.nutrition-label.unavailable { color: #806f6f; background: #f1ecea; }
+.nutrition-label.wasted { color: #713f12; background: #fbbf24; border: 1px solid #d97706; box-shadow: 0 0 0 2px rgba(245,158,11,.16); }
+.nutrition-label.severely-wasted { color: #fff; background: #dc2626; border: 1px solid #991b1b; box-shadow: 0 0 0 2px rgba(220,38,38,.2); }
 .learner-record { margin-bottom: 14px; padding: 17px; border-radius: 11px; background: white; box-shadow: 0 2px 10px rgba(123,26,26,.07); }
 .learner-record-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #eee5e1; }
 .learner-record-heading img { width: 58px; height: 58px; object-fit: cover; border-radius: 50%; }.learner-record-heading h3 { margin: 0 0 3px; color: #571919; font-size: .92rem; }.learner-record-heading p { margin: 0; color: #806868; font-size: .7rem; }
 .learner-fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }.learner-fields div { min-width: 0; }.learner-fields span { display: block; color: #947d7d; font-size: .62rem; text-transform: uppercase; }.learner-fields strong { display: block; overflow-wrap: anywhere; color: #402020; font-size: .72rem; margin-top: 2px; }
-@media (max-width: 800px) { .enrollment-stats, .grade-live-grid { grid-template-columns: repeat(2, 1fr); } .demographic-grid { grid-template-columns: 1fr; } }
-@media (max-width: 520px) { .enrollment-body { padding-left: 12px; padding-right: 12px; } .enrollment-stats, .demographic-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .advisory-groups { grid-template-columns: repeat(4, minmax(0,1fr)); } }
+@media (max-width: 800px) { .enrollment-stats, .grade-live-grid { grid-template-columns: repeat(2, 1fr); } .demographic-grid { grid-template-columns: 1fr; } .advisory-groups { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 520px) { .enrollment-body { padding-left: 12px; padding-right: 12px; } .enrollment-stats, .demographic-grid, .advisory-groups { grid-template-columns: 1fr; } }
 @media (max-width: 650px) { .learner-fields { grid-template-columns: 1fr 1fr; } .roster-overlay { padding: 10px; } }
+@media (max-width: 480px) { .kinder-session-grid { grid-template-columns: 1fr; } }
+@media print {
+  @page { size: landscape; margin: 10mm; }
+  body * { visibility: hidden !important; }
+  .roster-overlay, .roster-overlay * { visibility: visible !important; }
+  .roster-overlay { position: absolute; inset: 0; display: block; padding: 0; background: white; }
+  .roster-modal { width: 100%; max-height: none; overflow: visible; border-radius: 0; box-shadow: none; background: white; }
+  .roster-modal > header { padding: 10px 12px; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .roster-header-actions { display: none; }
+  .roster-body { overflow: visible; padding: 10px 0 0; }
+  .roster-table-wrap { overflow: visible; border-radius: 0; }
+  .roster-table { min-width: 0; font-size: 7.5pt; }
+  .roster-table th { position: static; padding: 6px 5px; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .roster-table td { padding: 5px; }
+  .roster-photo-cell img { width: 28px; height: 28px; }
+  .nutrition-label { padding: 2px 5px; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}

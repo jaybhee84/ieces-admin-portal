@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Topbar from "../components/Topbar";
 import { supabase } from "../lib/supabase";
+import { calcBMI, getBMIStatus, getHAZStatus } from "../lib/growth/bmi";
 import "./EnrollmentPage.css";
 
 const GRADES = [
@@ -13,6 +14,38 @@ const GRADES = [
   { key: "6", label: "Grade 6" },
   { key: "SNED", label: "SNED" },
 ];
+
+const IECES_SCHOOL_ID = "126001";
+const PAGE_SIZE = 1000;
+const preloadedTeacherPhotos = new Set();
+let enrollmentCache = null;
+
+const preloadTeacherPhotos = (teachers) => {
+  if (typeof Image === "undefined") return;
+  teachers.forEach((teacher) => {
+    const url = teacher?.photo_url;
+    if (!url || preloadedTeacherPhotos.has(url)) return;
+    preloadedTeacherPhotos.add(url);
+    const image = new Image();
+    image.decoding = "async";
+    image.src = url;
+  });
+};
+
+const fetchAllSchoolLearners = async () => {
+  const rows = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("students")
+      .select("*")
+      .eq("school_id", IECES_SCHOOL_ID)
+      .order("id", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) return { data: null, error };
+    rows.push(...(data || []));
+    if (!data || data.length < PAGE_SIZE) return { data: rows, error: null };
+  }
+};
 
 const enrollmentTimestamp = (learner) =>
   learner.created_at || learner.enrolled_at || learner.enrollment_date || learner.date_enrolled;
@@ -29,10 +62,11 @@ const displayDate = (key) => new Intl.DateTimeFormat("en-PH", {
   year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Manila",
 }).format(new Date(`${key}T00:00:00+08:00`));
 
+const normalizedGender = (learner) => String(learner.gender || learner.sex || "").trim().toUpperCase();
 const summarize = (learners) => ({
   total: learners.length,
-  male: learners.filter((item) => (item.gender || item.sex)?.toLowerCase() === "male").length,
-  female: learners.filter((item) => (item.gender || item.sex)?.toLowerCase() === "female").length,
+  male: learners.filter((item) => ["M", "MALE", "BOY"].includes(normalizedGender(item))).length,
+  female: learners.filter((item) => ["F", "FEMALE", "GIRL"].includes(normalizedGender(item))).length,
 });
 
 const countBy = (learners, getValue) => Object.entries(
@@ -58,44 +92,118 @@ function BreakdownCard({ title, rows }) {
   </div>;
 }
 
-const normalizedName = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const normalizedText = (value) => String(value || "")
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toUpperCase();
+const normalizedName = (value) => normalizedText(value).replace(/[^A-Z0-9]/g, "");
+const significantNameTokens = (value) => normalizedText(value)
+  .split(/[^A-Z0-9]+/)
+  .filter((token) => token.length > 1);
+const namesLikelyMatch = (left, right) => {
+  if (!left || !right) return false;
+  if (normalizedName(left) === normalizedName(right)) return true;
+  const leftTokens = significantNameTokens(left);
+  const rightTokens = significantNameTokens(right);
+  const smaller = leftTokens.length <= rightTokens.length ? leftTokens : rightTokens;
+  const larger = leftTokens.length <= rightTokens.length ? rightTokens : leftTokens;
+  return smaller.length >= 2 && smaller.every((token) => larger.includes(token));
+};
+const personNameKey = (person) => normalizedName(
+  person?.first_name && person?.family_name
+    ? `${person.first_name}${person.family_name}`
+    : person?.full_name || person?.name
+);
 const orgTeacherName = (teacher) =>
   [teacher.first_name, teacher.middle_name, teacher.family_name].filter(Boolean).join(" ") || teacher.name || "Unnamed adviser";
+const abbreviatedAdviserName = (adviser) => {
+  const firstName = String(adviser?.first_name || "").trim();
+  const middleName = String(adviser?.middle_name || "").trim();
+  const familyName = String(adviser?.family_name || adviser?.last_name || "").trim();
+  const suffix = String(adviser?.suffix || "").trim();
+  if (firstName && familyName) {
+    const middleInitial = middleName ? `${middleName.charAt(0).toUpperCase()}.` : "";
+    return [firstName, middleInitial, familyName, suffix].filter(Boolean).join(" ");
+  }
+
+  const storedName = String(adviser?.full_name || adviser?.name || adviser?.username || "Unnamed adviser").trim();
+  const parts = storedName.split(/\s+/).filter(Boolean);
+  if (parts.length < 3) return storedName;
+  return `${parts[0]} ${parts[1].charAt(0).toUpperCase()}. ${parts.at(-1)}`;
+};
 const adviserGradeKey = (value) => {
   const grade = String(value ?? "").toUpperCase().trim();
-  if (grade === "KINDER" || grade === "KINDERGARTEN" || grade === "0") return "0";
-  if (grade === "SNED" || grade === "SPED") return "SNED";
+  if (grade === "0" || grade.startsWith("KINDER")) return "0";
+  if (grade.startsWith("SNED") || grade.startsWith("SPED")) return "SNED";
   const number = grade.match(/[1-6]/)?.[0];
   return number || grade;
 };
+const learnerGradeKey = (learner) => adviserGradeKey(
+  learner.grade_level || learner.grade || learner.gradeLevel || learner.section
+);
+const baselineTeacherName = (learner) => {
+  if (learner.adviser_id || !learner.section) return "";
+  const section = String(learner.section).trim();
+  const kinder = section.match(/^KINDER(?:GARTEN)?\s*[-–—]\s*(.+?)(?:\s*[-–—]\s*(?:MORNING|AFTERNOON))?$/i);
+  if (kinder) return kinder[1].trim();
+  const graded = section.match(/^(?:GRADE\s*[1-6]|SNED|SPED)\s*[-–—]\s*(.+)$/i);
+  return graded?.[1]?.trim() || "";
+};
+const learnerSession = (learner) => {
+  const value = normalizedText(learner.session || learner.class_session || learner.session_assigned || learner.section);
+  if (value.includes("MORNING")) return "Morning";
+  if (value.includes("AFTERNOON")) return "Afternoon";
+  return "";
+};
 
 export default function EnrollmentPage({ user, onLogout, onBack }) {
-  const [learners, setLearners] = useState([]);
-  const [advisers, setAdvisers] = useState([]);
-  const [orgAdvisers, setOrgAdvisers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [learners, setLearners] = useState(() => enrollmentCache?.learners || []);
+  const [advisers, setAdvisers] = useState(() => enrollmentCache?.advisers || []);
+  const [orgAdvisers, setOrgAdvisers] = useState(() => enrollmentCache?.orgAdvisers || []);
+  const [portalAdvisers, setPortalAdvisers] = useState(() => enrollmentCache?.portalAdvisers || []);
+  const [loading, setLoading] = useState(() => !enrollmentCache);
   const [error, setError] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedAdviser, setSelectedAdviser] = useState(null);
+  const [selectedKinderSession, setSelectedKinderSession] = useState("");
 
   const fetchLearners = useCallback(async () => {
-    setLoading(true);
+    if (!enrollmentCache) setLoading(true);
     setError("");
-    const [studentResult, profileResult, orgResult] = await Promise.all([
-      supabase.from("students").select("*"),
+    const [studentResult, profileResult, orgResult, portalResult] = await Promise.all([
+      fetchAllSchoolLearners(),
       supabase.from("profiles").select("*"),
       supabase.from("org_chart").select("*"),
+      supabase.from("portal_profile").select("*"),
     ]);
-    if (studentResult.error) setError(studentResult.error.message);
-    else if (orgResult.error) setError(orgResult.error.message);
+    if (studentResult.error) {
+      if (!enrollmentCache) setError(studentResult.error.message);
+    }
+    else if (orgResult.error) {
+      if (!enrollmentCache) setError(orgResult.error.message);
+    }
     else {
-      setLearners(studentResult.data || []);
-      setAdvisers((profileResult.data || []).filter((profile) =>
+      const nextLearners = studentResult.data || [];
+      const nextAdvisers = (profileResult.data || []).filter((profile) =>
         profile.role === "adviser" || profile.section_assigned || profile.grade_level_assigned != null
-      ));
-      setOrgAdvisers((orgResult.data || []).filter((person) =>
+      );
+      const nextOrgAdvisers = (orgResult.data || []).filter((person) =>
         person.category === "teaching" && (String(person.teaching_type).toLowerCase() === "adviser" || person.is_grade_chairman)
-      ));
+      );
+      const nextPortalAdvisers = (portalResult.data || []).filter((profile) =>
+        profile.role === "adviser" || profile.role === "grade_chairman" || profile.section_assigned || profile.grade_level_assigned != null
+      );
+      preloadTeacherPhotos(nextOrgAdvisers);
+      enrollmentCache = {
+        learners: nextLearners,
+        advisers: nextAdvisers,
+        orgAdvisers: nextOrgAdvisers,
+        portalAdvisers: nextPortalAdvisers,
+      };
+      setLearners(nextLearners);
+      setAdvisers(nextAdvisers);
+      setOrgAdvisers(nextOrgAdvisers);
+      setPortalAdvisers(nextPortalAdvisers);
     }
     setLoading(false);
   }, []);
@@ -114,7 +222,16 @@ export default function EnrollmentPage({ user, onLogout, onBack }) {
       .channel("dashboard:org-advisers")
       .on("postgres_changes", { event: "*", schema: "public", table: "org_chart" }, fetchLearners)
       .subscribe();
-    return () => { supabase.removeChannel(channel); supabase.removeChannel(profileChannel); supabase.removeChannel(orgChannel); };
+    const portalProfileChannel = supabase
+      .channel("dashboard:portal-advisers")
+      .on("postgres_changes", { event: "*", schema: "public", table: "portal_profile" }, fetchLearners)
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+      supabase.removeChannel(profileChannel);
+      supabase.removeChannel(orgChannel);
+      supabase.removeChannel(portalProfileChannel);
+    };
   }, [fetchLearners]);
 
   const dailyRows = useMemo(() => {
@@ -141,18 +258,19 @@ export default function EnrollmentPage({ user, onLogout, onBack }) {
   const selectedLearners = dailyRows.find((row) => row.date === selectedDate)?.items || [];
 
   const selectedGradeRows = GRADES.map((grade) => {
-    const items = selectedLearners.filter((learner) => String(learner.grade_level).toUpperCase() === grade.key);
+    const items = selectedLearners.filter((learner) => learnerGradeKey(learner) === grade.key);
     return { ...grade, ...summarize(items) };
   });
   const overallGradeRows = GRADES.map((grade) => {
-    const items = learners.filter((learner) => String(learner.grade_level).toUpperCase() === grade.key);
+    const items = learners.filter((learner) => learnerGradeKey(learner) === grade.key);
     return { ...grade, ...summarize(items) };
   });
   const readingCategories = ["Non-Reader", "Frustration", "Instructional", "Independent"];
   const readingGrades = GRADES.filter((grade) => Number(grade.key) >= 1 && Number(grade.key) <= 6);
-  const readingCount = (category, gradeKey) => learners.filter((learner) =>
-    String(learner.grade_level) === gradeKey && (learner.reading_level || "Non-Reader") === category
-  ).length;
+  const readingCount = (category, gradeKey) => learners.filter((learner) => {
+    const readingLevel = learner.reading_level || (learner.gender ? "Non-Reader" : "");
+    return learnerGradeKey(learner) === gradeKey && readingLevel === category;
+  }).length;
   const demographicRows = {
     religion: countBy(selectedLearners, (learner) => learner.religion),
     tribe: countBy(selectedLearners, (learner) => learner.tribe),
@@ -160,20 +278,41 @@ export default function EnrollmentPage({ user, onLogout, onBack }) {
   };
   const advisorySources = orgAdvisers.length ? orgAdvisers.map((teacher) => {
     const teacherName = orgTeacherName(teacher);
-    const profile = advisers.find((candidate) => normalizedName(candidate.full_name || candidate.name) === normalizedName(teacherName));
+    const profile = advisers.find((candidate) => personNameKey(candidate) === personNameKey(teacher));
+    const portalProfile = portalAdvisers.find((candidate) => personNameKey(candidate) === personNameKey(teacher));
     return {
       ...teacher,
       profile_id: profile?.id,
+      portal_profile_id: portalProfile?.id,
+      assignment_ids: [teacher.id, profile?.id, portalProfile?.id].filter(Boolean),
       full_name: teacherName,
-      grade_level_assigned: teacher.grade_level,
-      section_assigned: profile?.section_assigned || teacher.section || teacher.section_assigned,
-      portal_profile: profile,
+      grade_level_assigned: teacher.grade_level || portalProfile?.grade_level_assigned || profile?.grade_level_assigned,
+      section_assigned: portalProfile?.section_assigned || profile?.section_assigned || teacher.section || teacher.section_assigned,
+      portal_profile: portalProfile,
     };
-  }) : advisers;
+  }) : (portalAdvisers.length ? portalAdvisers : advisers).map((profile) => ({
+    ...profile,
+    assignment_ids: [profile.id],
+  }));
 
   const advisoryRows = advisorySources.map((adviser) => {
-    const assignmentId = adviser.profile_id || adviser.id;
-    const items = learners.filter((learner) => String(learner.adviser_id) === String(assignmentId));
+    const assignmentIds = (adviser.assignment_ids || [adviser.id]).map(String);
+    const adviserGrade = adviserGradeKey(adviser.grade_level_assigned);
+    const adviserSection = normalizedName(adviser.section_assigned);
+    const adviserName = adviser.full_name || adviser.name || orgTeacherName(adviser);
+    const adviserFamilyName = adviser.family_name || significantNameTokens(adviserName).at(-1) || "";
+    const items = learners.filter((learner) => {
+      if (learner.adviser_id && assignmentIds.includes(String(learner.adviser_id))) return true;
+      const bmiTeacher = baselineTeacherName(learner);
+      if (bmiTeacher) {
+        const surnameMatch = normalizedName(bmiTeacher) === normalizedName(adviserFamilyName);
+        return learnerGradeKey(learner) === adviserGrade && (surnameMatch || namesLikelyMatch(bmiTeacher, adviserName));
+      }
+      return !learner.adviser_id
+        && Boolean(adviserSection)
+        && learnerGradeKey(learner) === adviserGrade
+        && normalizedName(learner.section || learner.section_assigned) === adviserSection;
+    });
     return { adviser, learners: items, ...summarize(items) };
   }).sort((a, b) =>
     String(adviserGradeKey(a.adviser.grade_level_assigned)).localeCompare(String(adviserGradeKey(b.adviser.grade_level_assigned)), undefined, { numeric: true }) ||
@@ -185,6 +324,14 @@ export default function EnrollmentPage({ user, onLogout, onBack }) {
       .filter((row) => adviserGradeKey(row.adviser.grade_level_assigned) === grade.key)
       .sort((a, b) => Number(Boolean(b.adviser.is_grade_chairman)) - Number(Boolean(a.adviser.is_grade_chairman))),
   }));
+  const openAdviser = (row) => {
+    setSelectedAdviser(row);
+    setSelectedKinderSession("");
+  };
+  const closeAdviser = () => {
+    setSelectedAdviser(null);
+    setSelectedKinderSession("");
+  };
 
   return (
     <div className="enrollment-root">
@@ -193,7 +340,7 @@ export default function EnrollmentPage({ user, onLogout, onBack }) {
         <div className="enrollment-heading">
           <div>
             <h1>Learner Enrollment</h1>
-            <p>Live enrollment data submitted through the IECES Portal.</p>
+            <p>Shared learner data for School ID {IECES_SCHOOL_ID} from the IECES Portal and BMI Baseline Entry.</p>
           </div>
           <button onClick={fetchLearners} disabled={loading}>Refresh</button>
         </div>
@@ -209,29 +356,34 @@ export default function EnrollmentPage({ user, onLogout, onBack }) {
             <div><span>Female</span><strong>{totals.female}</strong></div>
           </section>
 
-          <section className="enrollment-panel advisory-highlight">
-            <div className="panel-title"><div><h2>Advisory Classes</h2><p>Double-click an adviser to view the complete learner roster.</p></div></div>
-            {advisoryRows.length === 0 ? <div className="enrollment-empty">No advisory class data is visible. Apply supabase-enrollment-dashboard-access.sql if advisers exist in the portal.</div> :
-              <div className="advisory-groups">{advisoryGradeGroups.map((group) => <section className="advisory-grade-group" key={group.key}>
-                <div className="advisory-grade-heading"><h3>{group.label}</h3><span>{group.rows.reduce((total, row) => total + row.total, 0)} learners</span></div>
-                <div className="adviser-list">{group.rows.length === 0 ? <div className="adviser-empty">No adviser assigned</div> : group.rows.map((row) => {
-                  const fullName = row.adviser.full_name || row.adviser.name || row.adviser.username || "Unnamed adviser";
-                  const firstName = row.adviser.first_name || fullName.trim().split(/\s+/)[0];
-                  return <div className={`adviser-row ${row.adviser.is_grade_chairman ? "chairman" : ""}`} key={row.adviser.id} onDoubleClick={() => setSelectedAdviser(row)} title="Double-click to view learners">
-                    {row.adviser.photo_url ? <img src={row.adviser.photo_url} alt="" /> : <div className="adviser-avatar">👤</div>}
-                    <div className="adviser-identity"><strong>{firstName}</strong><span>{fullName}</span>{row.adviser.section_assigned && <small>Section {row.adviser.section_assigned}</small>}</div>
-                    {row.adviser.is_grade_chairman && <span className="chairman-badge">★ Grade Chairman</span>}
-                    <div className="adviser-total"><strong>{row.total}</strong><span>Learners</span></div>
-                  </div>;
-                })}</div>
-              </section>)}</div>}
-          </section>
-
           <section className="enrollment-panel">
             <div className="panel-title"><div><h2>Enrollment by Grade Level</h2><p>Live school-wide totals from Kinder through Grade 6 and SNED.</p></div></div>
             <div className="grade-live-grid">{overallGradeRows.map((row) => <div className="grade-live-card" key={row.key}>
               <span>{row.label}</span><strong>{row.total}</strong><small>{row.male} Male · {row.female} Female</small>
             </div>)}</div>
+          </section>
+
+          <section className="enrollment-panel advisory-highlight">
+            <div className="panel-title"><div><h2>Advisory Classes</h2><p>Click an adviser to view the complete learner roster.</p></div></div>
+            {advisoryRows.length === 0 ? <div className="enrollment-empty">No advisory class data is visible. Apply supabase-enrollment-dashboard-access.sql if advisers exist in the portal.</div> :
+              <div className="advisory-groups">{advisoryGradeGroups.map((group) => <section className="advisory-grade-group" key={group.key}>
+                <div className="advisory-grade-heading"><h3>{group.label}</h3><span>{group.rows.reduce((total, row) => total + row.total, 0)} learners</span></div>
+                <div className="adviser-list">{group.rows.length === 0 ? <div className="adviser-empty">No adviser assigned</div> : group.rows.map((row) => {
+                  const fullName = abbreviatedAdviserName(row.adviser);
+                  return <div className={`adviser-row ${row.adviser.is_grade_chairman ? "chairman" : ""}`} key={row.adviser.id} onClick={() => openAdviser(row)} title="Click to view learners" role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openAdviser(row); }}>
+                    {row.adviser.photo_url ? <img src={row.adviser.photo_url} alt="" loading="eager" decoding="async" /> : <div className="adviser-avatar">👤</div>}
+                    <div className="adviser-identity">
+                      <div className="adviser-name-line">
+                        <strong>{fullName}</strong>
+                        <div className="adviser-total"><strong>{row.total}</strong><span>Learners</span></div>
+                      </div>
+                      {row.adviser.is_grade_chairman && <span className="chairman-badge">★ Chairman</span>}
+                      {row.adviser.section_assigned && <small>Section {row.adviser.section_assigned}</small>}
+                      <div className="adviser-sex-counts"><span>Male: <strong>{row.male}</strong></span><span>Female: <strong>{row.female}</strong></span></div>
+                    </div>
+                  </div>;
+                })}</div>
+              </section>)}</div>}
           </section>
 
           <section className="enrollment-panel">
@@ -278,32 +430,151 @@ export default function EnrollmentPage({ user, onLogout, onBack }) {
           </section>}
         </>}
       </main>
-      {selectedAdviser && <AdvisoryRoster row={selectedAdviser} onClose={() => setSelectedAdviser(null)} />}
+      {selectedAdviser && adviserGradeKey(selectedAdviser.adviser.grade_level_assigned) === "0" && !selectedKinderSession && (
+        <KinderSessionPicker row={selectedAdviser} onSelect={setSelectedKinderSession} onClose={closeAdviser} />
+      )}
+      {selectedAdviser && (adviserGradeKey(selectedAdviser.adviser.grade_level_assigned) !== "0" || selectedKinderSession) && (
+        <AdvisoryRoster
+          row={selectedKinderSession
+            ? { ...selectedAdviser, learners: selectedAdviser.learners.filter((learner) => learnerSession(learner) === selectedKinderSession) }
+            : selectedAdviser}
+          session={selectedKinderSession}
+          onClose={closeAdviser}
+        />
+      )}
     </div>
   );
 }
 
-const hiddenLearnerFields = new Set(["id", "adviser_id", "photo_url"]);
-const fieldLabel = (key) => key.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-const learnerName = (learner) => [learner.family_name, learner.first_name, learner.middle_name].filter(Boolean).join(", ") || learner.name || "Unnamed learner";
+const learnerName = (learner) => {
+  if (learner.family_name || learner.first_name) {
+    const givenNames = [learner.first_name, learner.middle_name, learner.suffix].filter(Boolean).join(" ");
+    return [learner.family_name, givenNames].filter(Boolean).join(", ");
+  }
+  return learner.name || "Unnamed learner";
+};
 
-function AdvisoryRoster({ row, onClose }) {
-  const adviserName = row.adviser.full_name || row.adviser.name || row.adviser.username || "Adviser";
+const displayBirthdate = (value) => {
+  if (!value) return "—";
+  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" });
+};
+
+const learnerAge = (learner) => {
+  if (learner.age !== null && learner.age !== undefined && learner.age !== "") return learner.age;
+  if (!learner.birthdate) return "—";
+  const birthdate = new Date(learner.birthdate);
+  if (Number.isNaN(birthdate.getTime())) return "—";
+  const today = new Date();
+  let age = today.getFullYear() - birthdate.getFullYear();
+  if (today < new Date(today.getFullYear(), birthdate.getMonth(), birthdate.getDate())) age--;
+  return age >= 0 ? age : "—";
+};
+
+const normalizedRecords = (value) => {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  if (typeof value === "object") return [value];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : parsed && typeof parsed === "object" ? [parsed] : [];
+  } catch {
+    return [];
+  }
+};
+
+const latestMeasurement = (learner) => {
+  const records = normalizedRecords(learner.records).filter((record) => record?.weight || record?.height);
+  if (!records.length && (learner.weight || learner.height)) return learner;
+  return records.sort((left, right) => String(left.date || "").localeCompare(String(right.date || ""))).at(-1) || null;
+};
+
+const nutritionalStatus = (learner) => {
+  const record = latestMeasurement(learner);
+  if (!record) return { bmi: "—", hfa: "—" };
+  const sex = normalizedGender(learner).startsWith("F") ? "F" : "M";
+  const fallbackMonths = Number(learner.age) > 0 ? Number(learner.age) * 12 : undefined;
+  const bmiValue = calcBMI(record.weight, record.height);
+  const computedBmi = getBMIStatus(bmiValue, sex, learner.birthdate, record.date, fallbackMonths)?.label;
+  const computedHfa = getHAZStatus(record.height, sex, learner.birthdate, record.date, fallbackMonths)?.label;
+  return {
+    bmi: learner.bmi_status || record.bmi_status || record.status?.label || record.baz?.label || computedBmi || "—",
+    hfa: learner.hfa_status || learner.haz_status || record.hfa_status || record.haz_status || record.haz?.label || computedHfa || "—",
+  };
+};
+
+const nutritionClass = (status) => {
+  const value = String(status || "").toLowerCase();
+  if (value === "severely wasted") return "severely-wasted";
+  if (value === "wasted") return "wasted";
+  if (value === "—") return "unavailable";
+  return "standard";
+};
+
+function KinderSessionPicker({ row, onSelect, onClose }) {
+  const adviserName = abbreviatedAdviserName(row.adviser);
+  const sessions = ["Morning", "Afternoon"].map((session) => ({
+    session,
+    count: row.learners.filter((learner) => learnerSession(learner) === session).length,
+  }));
+  return <div className="roster-overlay" onClick={onClose}>
+    <div className="kinder-session-modal" onClick={(event) => event.stopPropagation()}>
+      <header>
+        <div>
+          <span>Kinder advisory classes</span>
+          <h2>{adviserName}</h2>
+          <p>Select the class session to view its learner roster.</p>
+        </div>
+        <button onClick={onClose} aria-label="Close session selection">✕</button>
+      </header>
+      <div className="kinder-session-grid">
+        {sessions.map(({ session, count }) => <button type="button" className={`kinder-session-card ${session.toLowerCase()}`} key={session} onClick={() => onSelect(session)}>
+          <span aria-hidden="true">{session === "Morning" ? "☀️" : "🌤️"}</span>
+          <strong>{session}</strong>
+          <small>Session</small>
+          <b>{count} learner{count === 1 ? "" : "s"}</b>
+        </button>)}
+      </div>
+    </div>
+  </div>;
+}
+
+function AdvisoryRoster({ row, session, onClose }) {
+  const adviserName = abbreviatedAdviserName(row.adviser);
+  const sortedLearners = [...row.learners].sort((left, right) => learnerName(left).localeCompare(learnerName(right)));
   return <div className="roster-overlay" onClick={onClose}>
     <div className="roster-modal" onClick={(event) => event.stopPropagation()}>
-      <header><div><h2>{adviserName}</h2><p>{row.adviser.section_assigned || "Advisory Class"} · {row.total} learner{row.total === 1 ? "" : "s"}</p></div><button onClick={onClose}>✕</button></header>
+      <header>
+        <div className="roster-adviser-heading">
+          {row.adviser.photo_url ? <img src={row.adviser.photo_url} alt={`${adviserName} profile`} loading="eager" decoding="async" /> : <div className="roster-adviser-avatar" aria-hidden="true">👤</div>}
+          <div><h2>{adviserName}</h2><p>{session ? `${session} Session` : row.adviser.section_assigned || "Advisory Class"} · {row.learners.length} learner{row.learners.length === 1 ? "" : "s"}</p></div>
+        </div>
+        <div className="roster-header-actions">
+          <button className="roster-print" onClick={() => window.print()}>🖨 Print</button>
+          <button className="roster-close" onClick={onClose} aria-label="Close learner roster">✕</button>
+        </div>
+      </header>
       <div className="roster-body">
-        {row.learners.length === 0 ? <div className="enrollment-empty">No learners are assigned to this adviser.</div> : row.learners.map((learner) =>
-          <section className="learner-record" key={learner.id}>
-            <div className="learner-record-heading">
-              {learner.photo_url && <img src={learner.photo_url} alt="" />}
-              <div><h3>{learnerName(learner)}</h3><p>{learner.gender || learner.sex || "Gender not specified"}</p></div>
-            </div>
-            <div className="learner-fields">{Object.entries(learner).filter(([key, value]) =>
-              !hiddenLearnerFields.has(key) && value !== null && value !== "" && typeof value !== "object"
-            ).map(([key, value]) => <div key={key}><span>{fieldLabel(key)}</span><strong>{typeof value === "boolean" ? (value ? "Yes" : "No") : String(value)}</strong></div>)}</div>
-          </section>
-        )}
+        {row.learners.length === 0 ? <div className="enrollment-empty">No learners are assigned to this adviser.</div> : <div className="roster-table-wrap"><table className="roster-table">
+          <thead><tr><th>No.</th><th>Photo</th><th>LRN</th><th>Full Name</th><th>Birthdate</th><th>Age</th><th>Religion</th><th>Tribe</th><th>Barangay</th><th>BMI Status</th><th>HFA Status</th></tr></thead>
+          <tbody>{sortedLearners.map((learner, index) => {
+            const status = nutritionalStatus(learner);
+            return <tr key={learner.id}>
+              <td className="roster-number">{index + 1}</td>
+              <td className="roster-photo-cell">{(learner.photo_url || learner.photo) ? <img src={learner.photo_url || learner.photo} alt="" loading="eager" decoding="async" /> : null}</td>
+              <td>{learner.lrn && learner.lrn !== "—" ? learner.lrn : learner.registry_no || learner.registryNo || "—"}</td>
+              <td><strong>{learnerName(learner)}</strong></td>
+              <td>{displayBirthdate(learner.birthdate)}</td>
+              <td>{learnerAge(learner)}</td>
+              <td>{learner.religion || "—"}</td>
+              <td>{learner.tribe || "—"}</td>
+              <td>{barangayOf(learner) || "—"}</td>
+              <td><span className={`nutrition-label ${nutritionClass(status.bmi)}`}>{status.bmi}</span></td>
+              <td><span className={`nutrition-label ${nutritionClass(status.hfa)}`}>{status.hfa}</span></td>
+            </tr>;
+          })}</tbody>
+          <tfoot><tr><th colSpan="11">Total Learners: {sortedLearners.length}</th></tr></tfoot>
+        </table></div>}
       </div>
     </div>
   </div>;

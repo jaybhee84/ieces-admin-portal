@@ -38,6 +38,14 @@ const MODULES = [
     badge: "active",
     badgeText: "✅ Active",
   },
+  {
+    id: "school-bulletin",
+    icon: "📣",
+    label: "School Bulletin",
+    desc: "Publish class suspensions, office orders, and other official notices to the public website.",
+    badge: "active",
+    badgeText: "✅ Active",
+  },
 ];
 
 export default function Dashboard({ user, onLogout, onNavigate, addToast, showConfirm }) {
