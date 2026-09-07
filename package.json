@@ -1,11 +1,11 @@
 {
-  "name": "ieces-report",
-  "version": "3.0.8",
-  "description": "IECES Admin Manager",
+  "name": "ieces-admin-portal",
+  "version": "1.0.0",
+  "description": "IECES Admin Portal",
   "author": "BuzzJay",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jaybhee84/ieces-report.git"
+    "url": "https://github.com/jaybhee84/ieces-admin-portal.git"
   },
   "main": "electron/main.cjs",
   "scripts": {
@@ -36,13 +36,13 @@
     "react-router-dom": "^6.27.0"
   },
   "build": {
-    "appId": "com.ieces.report",
-    "productName": "IECES Admin Manager",
+    "appId": "com.ieces.adminportal",
+    "productName": "IECES Admin Portal",
     "publish": [
       {
         "provider": "github",
         "owner": "jaybhee84",
-        "repo": "ieces-report",
+        "repo": "ieces-admin-portal",
         "releaseType": "release"
       }
     ],

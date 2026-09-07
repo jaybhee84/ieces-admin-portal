@@ -35,7 +35,7 @@ create policy "public read active bulletin announcements"
   using (is_published = true and (expires_at is null or expires_at >= now()));
 
 -- These policies are additive: policies belonging to another IECES admin app
--- remain in place, while registered ieces-report users receive manager access.
+-- remain in place, while registered ieces-admin-portal users receive manager access.
 drop policy if exists "report users read bulletin announcements" on public.bulletin_announcements;
 create policy "report users read bulletin announcements"
   on public.bulletin_announcements for select to authenticated

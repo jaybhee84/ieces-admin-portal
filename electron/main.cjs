@@ -114,7 +114,7 @@ function createWindow() {
       nodeIntegration: false
     },
     titleBarStyle: 'default',
-    title: 'IECES Admin Manager',
+    title: 'IECES Admin Portal',
     show: false
   })
 
