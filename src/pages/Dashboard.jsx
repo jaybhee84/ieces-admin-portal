@@ -46,6 +46,14 @@ const MODULES = [
     badge: "active",
     badgeText: "✅ Active",
   },
+  {
+    id: "form137",
+    icon: "📄",
+    label: "Form 137 & Learner Records",
+    desc: "Search the full learner database, review a learner's complete record, and print their SF10-ES / Form 137 — for the school AO/Registrar.",
+    badge: "active",
+    badgeText: "✅ Active",
+  },
 ];
 
 export default function Dashboard({ user, onLogout, onNavigate, addToast, showConfirm }) {

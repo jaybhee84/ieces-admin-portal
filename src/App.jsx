@@ -11,6 +11,7 @@ import OrgChartPage from "./pages/OrgChartPage";
 import MediaManagerPage from "./pages/MediaManagerPage";
 import EnrollmentPage from "./pages/EnrollmentPage";
 import SchoolBulletinPage from "./pages/SchoolBulletinPage";
+import Form137Page from "./pages/Form137Page";
 import SplashScreen from "./components/SplashScreen";
 import "./App.css";
 
@@ -253,6 +254,14 @@ export default function App() {
       )}
       {page === "school-bulletin" && session && (
         <SchoolBulletinPage
+          onBack={() => setPage("dashboard")}
+          onLogout={handleLogout}
+          user={session?.user}
+          {...sharedProps}
+        />
+      )}
+      {page === "form137" && session && (
+        <Form137Page
           onBack={() => setPage("dashboard")}
           onLogout={handleLogout}
           user={session?.user}
