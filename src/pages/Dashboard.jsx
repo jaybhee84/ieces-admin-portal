@@ -32,9 +32,9 @@ const MODULES = [
   },
   {
     id: "media-manager",
-    icon: "📰",
-    label: "IECES Media Manager",
-    desc: "Review and approve submitted news articles before they appear on the school website.",
+    icon: "🖼️",
+    label: "Media and Homepage",
+    desc: "Approve submitted news articles and manage the photo slideshow on the school website homepage.",
     badge: "active",
     badgeText: "✅ Active",
   },

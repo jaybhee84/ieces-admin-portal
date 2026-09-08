@@ -12,3 +12,7 @@ export const BUCKET = 'news-photos'
 
 // ── Table name (run the SQL migration below to create it) ────────────────────
 export const TABLE = 'news_articles'
+
+// ── Homepage slideshow (see supabase-homepage-slides.sql) ────────────────────
+export const HOMEPAGE_BUCKET = 'homepage-photos'
+export const HOMEPAGE_SLIDES_TABLE = 'homepage_slides'
