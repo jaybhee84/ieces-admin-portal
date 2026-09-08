@@ -145,12 +145,89 @@ function ArticlesTab({ addToast, showConfirm }) {
   );
 }
 
+function FocalPointAdjuster({ slide, onSave, onCancel }) {
+  const [focalX, setFocalX] = useState(slide.focal_x ?? 50);
+  const [focalY, setFocalY] = useState(slide.focal_y ?? 50);
+  const [saving, setSaving] = useState(false);
+  const boxRef = useRef(null);
+  const dragRef = useRef(null);
+
+  const applyDrag = (clientX, clientY) => {
+    const box = boxRef.current;
+    const drag = dragRef.current;
+    if (!box || !drag) return;
+    const dx = clientX - drag.startX;
+    const dy = clientY - drag.startY;
+    const nextX = drag.startFocalX - (dx / box.clientWidth) * 100;
+    const nextY = drag.startFocalY - (dy / box.clientHeight) * 100;
+    setFocalX(Math.min(100, Math.max(0, nextX)));
+    setFocalY(Math.min(100, Math.max(0, nextY)));
+  };
+
+  const stopDrag = () => {
+    dragRef.current = null;
+    window.removeEventListener("mousemove", handleMouseMove);
+    window.removeEventListener("mouseup", stopDrag);
+    window.removeEventListener("touchmove", handleTouchMove);
+    window.removeEventListener("touchend", stopDrag);
+  };
+
+  const handleMouseMove = (e) => applyDrag(e.clientX, e.clientY);
+  const handleTouchMove = (e) => {
+    if (e.touches[0]) applyDrag(e.touches[0].clientX, e.touches[0].clientY);
+  };
+
+  const startDrag = (clientX, clientY) => {
+    dragRef.current = { startX: clientX, startY: clientY, startFocalX: focalX, startFocalY: focalY };
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", stopDrag);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchend", stopDrag);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const { error } = await supabase
+      .from(HOMEPAGE_SLIDES_TABLE)
+      .update({ focal_x: focalX, focal_y: focalY })
+      .eq("id", slide.id);
+    setSaving(false);
+    if (!error) onSave(focalX, focalY);
+  };
+
+  return (
+    <div className="focal-overlay" onClick={onCancel}>
+      <div className="focal-dialog" onClick={(e) => e.stopPropagation()}>
+        <h3>Adjust Photo Position</h3>
+        <p>Drag the photo to choose what stays centered on the homepage banner.</p>
+        <div
+          className="focal-box"
+          ref={boxRef}
+          onMouseDown={(e) => { e.preventDefault(); startDrag(e.clientX, e.clientY); }}
+          onTouchStart={(e) => { if (e.touches[0]) startDrag(e.touches[0].clientX, e.touches[0].clientY); }}
+          style={{
+            backgroundImage: `url(${slide.image_url})`,
+            backgroundPosition: `${focalX}% ${focalY}%`,
+          }}
+        />
+        <div className="focal-actions">
+          <button className="focal-cancel" onClick={onCancel} disabled={saving}>Cancel</button>
+          <button className="focal-save" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : "Save Position"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HomepageTab({ addToast, showConfirm }) {
   const [slides, setSlides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [adjustingSlide, setAdjustingSlide] = useState(null);
   const fileInputRef = useRef(null);
 
   const fetchSlides = useCallback(async () => {
@@ -158,14 +235,17 @@ function HomepageTab({ addToast, showConfirm }) {
     setError("");
     const { data, error: queryError } = await supabase
       .from(HOMEPAGE_SLIDES_TABLE)
-      .select("id,image_url,storage_path,sort_order,created_at")
+      .select("id,image_url,storage_path,sort_order,focal_x,focal_y,created_at")
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true });
 
     if (queryError) {
       const message = queryError.message?.toLowerCase() || "";
       const missingTable = message.includes("does not exist") || message.includes("could not find the table");
-      setError(missingTable
+      const missingColumn = missingTable && message.includes("focal");
+      setError(missingColumn
+        ? "The focal point migration has not been applied yet. Run supabase-homepage-slides-focal-point.sql in the Supabase SQL Editor."
+        : missingTable
         ? "The homepage slideshow database migration has not been applied yet. Run supabase-homepage-slides.sql in the Supabase SQL Editor."
         : queryError.message);
     } else {
@@ -278,16 +358,25 @@ function HomepageTab({ addToast, showConfirm }) {
 
             {slides.map((slide) => (
               <div className="slide-card" key={slide.id}>
-                <img src={slide.image_url} alt="" />
+                <img
+                  src={slide.image_url}
+                  alt=""
+                  style={{ objectPosition: `${slide.focal_x ?? 50}% ${slide.focal_y ?? 50}%` }}
+                />
                 <div className="slide-caption">
                   <span>Homepage photo</span>
-                  <button
-                    className="slide-delete"
-                    disabled={deletingId === slide.id}
-                    onClick={() => handleDelete(slide)}
-                  >
-                    Remove
-                  </button>
+                  <div className="slide-caption-actions">
+                    <button className="slide-adjust" onClick={() => setAdjustingSlide(slide)}>
+                      Adjust
+                    </button>
+                    <button
+                      className="slide-delete"
+                      disabled={deletingId === slide.id}
+                      onClick={() => handleDelete(slide)}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -306,6 +395,20 @@ function HomepageTab({ addToast, showConfirm }) {
             />
           </label>
         </>
+      )}
+
+      {adjustingSlide && (
+        <FocalPointAdjuster
+          slide={adjustingSlide}
+          onCancel={() => setAdjustingSlide(null)}
+          onSave={(focalX, focalY) => {
+            setSlides((current) => current.map((item) =>
+              item.id === adjustingSlide.id ? { ...item, focal_x: focalX, focal_y: focalY } : item
+            ));
+            setAdjustingSlide(null);
+            addToast("Photo position saved.", "success");
+          }}
+        />
       )}
     </>
   );
