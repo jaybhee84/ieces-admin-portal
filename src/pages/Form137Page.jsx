@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Topbar from "../components/Topbar";
 import { supabase } from "../lib/supabase";
-import { calcBMI, getBMIStatus, getHAZStatus } from "../lib/growth/bmi";
+import { calcBMI, getBMIStatus, getHAZStatus, BAZ_META, HAZ_META } from "../lib/growth/bmi";
 import educationSeal from "../image/deped-education-seal.png";
 import depedLogo from "../image/deped-logo.gif";
 import "./Form137Page.css";
@@ -308,6 +308,120 @@ const adviserGradeKey = (value) => {
 const learnerGradeKey = (learner) => adviserGradeKey(learner.grade_level || learner.grade || learner.gradeLevel || learner.section);
 const learnerGradeLabel = (learner) => GRADES.find((grade) => grade.key === learnerGradeKey(learner))?.label || "—";
 
+// ── Adviser resolution (mirrors EnrollmentPage.jsx — students rarely have adviser_name
+// populated directly, so the real adviser is matched from the org chart / profile tables) ──
+
+const normalizedText = (value) => String(value || "")
+  .normalize("NFD")
+  .replace(/[̀-ͯ]/g, "")
+  .toUpperCase();
+const normalizedName = (value) => normalizedText(value).replace(/[^A-Z0-9]/g, "");
+const significantNameTokens = (value) => normalizedText(value)
+  .split(/[^A-Z0-9]+/)
+  .filter((token) => token.length > 1);
+const namesLikelyMatch = (left, right) => {
+  if (!left || !right) return false;
+  if (normalizedName(left) === normalizedName(right)) return true;
+  const leftTokens = significantNameTokens(left);
+  const rightTokens = significantNameTokens(right);
+  const smaller = leftTokens.length <= rightTokens.length ? leftTokens : rightTokens;
+  const larger = leftTokens.length <= rightTokens.length ? rightTokens : leftTokens;
+  return smaller.length >= 2 && smaller.every((token) => larger.includes(token));
+};
+const personNameKey = (person) => normalizedName(
+  person?.first_name && person?.family_name
+    ? `${person.first_name}${person.family_name}`
+    : person?.full_name || person?.name,
+);
+const orgTeacherName = (teacher) =>
+  [teacher.first_name, teacher.middle_name, teacher.family_name].filter(Boolean).join(" ") || teacher.name || "Unnamed adviser";
+const abbreviatedAdviserName = (adviser) => {
+  const firstName = String(adviser?.first_name || "").trim();
+  const middleName = String(adviser?.middle_name || "").trim();
+  const familyName = String(adviser?.family_name || adviser?.last_name || "").trim();
+  const suffix = String(adviser?.suffix || "").trim();
+  if (firstName && familyName) {
+    const middleInitial = middleName ? `${middleName.charAt(0).toUpperCase()}.` : "";
+    return [firstName, middleInitial, familyName, suffix].filter(Boolean).join(" ");
+  }
+  const storedName = String(adviser?.full_name || adviser?.name || adviser?.username || "Unnamed adviser").trim();
+  const parts = storedName.split(/\s+/).filter(Boolean);
+  if (parts.length < 3) return storedName;
+  return `${parts[0]} ${parts[1].charAt(0).toUpperCase()}. ${parts.at(-1)}`;
+};
+const baselineTeacherName = (learner) => {
+  if (learner.adviser_id || !learner.section) return "";
+  const section = String(learner.section).trim();
+  const kinder = section.match(/^KINDER(?:GARTEN)?\s*[-–—]\s*(.+?)(?:\s*[-–—]\s*(?:MORNING|AFTERNOON))?$/i);
+  if (kinder) return kinder[1].trim();
+  const graded = section.match(/^(?:GRADE\s*[1-6]|SNED|SPED)\s*[-–—]\s*(.+)$/i);
+  return graded?.[1]?.trim() || "";
+};
+
+// Sections are often stored as "Grade 4 - Poliquit"; strip the leading grade/kinder
+// prefix for a compact badge so it doesn't repeat the grade label shown beside it.
+const sectionShortLabel = (learner) => {
+  const section = String(learner.section || "").trim();
+  if (!section) return "";
+  const stripped = section.replace(/^(?:GRADE\s*[1-6]|KINDER(?:GARTEN)?|SNED|SPED)\s*[-–—]\s*/i, "").trim();
+  return stripped || section;
+};
+
+const fetchAdviserSources = async () => {
+  const [profileResult, orgResult, portalResult] = await Promise.all([
+    supabase.from("profiles").select("*"),
+    supabase.from("org_chart").select("*"),
+    supabase.from("portal_profile").select("*"),
+  ]);
+  const advisers = (profileResult.data || []).filter((profile) =>
+    profile.role === "adviser" || profile.section_assigned || profile.grade_level_assigned != null);
+  const orgAdvisers = (orgResult.data || []).filter((person) =>
+    person.category === "teaching" && (String(person.teaching_type).toLowerCase() === "adviser" || person.is_grade_chairman));
+  const portalAdvisers = (portalResult.data || []).filter((profile) =>
+    profile.role === "adviser" || profile.role === "grade_chairman" || profile.section_assigned || profile.grade_level_assigned != null);
+
+  const advisorySources = orgAdvisers.length ? orgAdvisers.map((teacher) => {
+    const teacherName = orgTeacherName(teacher);
+    const profile = advisers.find((candidate) => personNameKey(candidate) === personNameKey(teacher));
+    const portalProfile = portalAdvisers.find((candidate) => personNameKey(candidate) === personNameKey(teacher));
+    return {
+      ...teacher,
+      assignment_ids: [teacher.id, profile?.id, portalProfile?.id].filter(Boolean),
+      full_name: teacherName,
+      grade_level_assigned: teacher.grade_level || portalProfile?.grade_level_assigned || profile?.grade_level_assigned,
+      section_assigned: portalProfile?.section_assigned || profile?.section_assigned || teacher.section || teacher.section_assigned,
+    };
+  }) : (portalAdvisers.length ? portalAdvisers : advisers).map((profile) => ({ ...profile, assignment_ids: [profile.id] }));
+
+  return advisorySources;
+};
+
+const resolveLearnerAdviser = (learner, advisorySources) => {
+  if (learner.adviser_id) {
+    const byId = advisorySources.find((adviser) =>
+      (adviser.assignment_ids || [adviser.id]).map(String).includes(String(learner.adviser_id)));
+    if (byId) return byId;
+  }
+  const learnerGrade = learnerGradeKey(learner);
+  const bmiTeacher = baselineTeacherName(learner);
+  return advisorySources.find((adviser) => {
+    if (adviserGradeKey(adviser.grade_level_assigned) !== learnerGrade) return false;
+    const adviserName = adviser.full_name || adviser.name || orgTeacherName(adviser);
+    if (bmiTeacher) {
+      const adviserFamilyName = adviser.family_name || significantNameTokens(adviserName).at(-1) || "";
+      return normalizedName(bmiTeacher) === normalizedName(adviserFamilyName) || namesLikelyMatch(bmiTeacher, adviserName);
+    }
+    const adviserSection = normalizedName(adviser.section_assigned);
+    return !learner.adviser_id && Boolean(adviserSection) && normalizedName(learner.section || learner.section_assigned) === adviserSection;
+  }) || null;
+};
+
+const learnerAdviserName = (learner, advisorySources) => {
+  if (learner.adviser_name?.trim()) return learner.adviser_name.trim();
+  const adviser = resolveLearnerAdviser(learner, advisorySources);
+  return adviser ? abbreviatedAdviserName(adviser) : "";
+};
+
 const normalizedRecords = (value) => {
   if (Array.isArray(value)) return value;
   if (!value) return [];
@@ -320,24 +434,53 @@ const normalizedRecords = (value) => {
   }
 };
 
-const latestMeasurement = (learner) => {
+const QUARTER_LABELS = ["Baseline", "Midline", "Endline"];
+
+const measurementRecords = (learner) => {
   const records = normalizedRecords(learner.records).filter((record) => record?.weight || record?.height);
-  if (!records.length && (learner.weight || learner.height)) return learner;
-  return records.sort((left, right) => String(left.date || "").localeCompare(String(right.date || ""))).at(-1) || null;
+  if (!records.length && (learner.weight || learner.height)) return [learner];
+  return records;
 };
 
-const nutritionalStatus = (learner) => {
-  const record = latestMeasurement(learner);
-  if (!record) return { bmi: "—", hfa: "—" };
+const recordQuarterLabel = (record) => {
+  const raw = String(record?.quarter || record?.period || record?.term || record?.stage || "").trim().toLowerCase();
+  return QUARTER_LABELS.find((label) => label.toLowerCase() === raw) || "";
+};
+
+const statusForRecord = (learner, record) => {
   const sex = normalizedGender(learner).startsWith("F") ? "F" : "M";
   const fallbackMonths = Number(learner.age) > 0 ? Number(learner.age) * 12 : undefined;
   const bmiValue = calcBMI(record.weight, record.height);
   const computedBmi = getBMIStatus(bmiValue, sex, learner.birthdate, record.date, fallbackMonths)?.label;
   const computedHfa = getHAZStatus(record.height, sex, learner.birthdate, record.date, fallbackMonths)?.label;
   return {
-    bmi: learner.bmi_status || record.bmi_status || record.status?.label || record.baz?.label || computedBmi || "—",
-    hfa: learner.hfa_status || learner.haz_status || record.hfa_status || record.haz_status || record.haz?.label || computedHfa || "—",
+    bmi: record.bmi_status || record.status?.label || record.baz?.label || computedBmi || "—",
+    hfa: record.hfa_status || record.haz_status || record.haz?.label || computedHfa || "—",
   };
+};
+
+// Groups a learner's growth records into the DepEd Baseline / Midline / Endline
+// cycle. Uses an explicit quarter tag on the record when the BMI Baseline Entry
+// app provides one; otherwise falls back to chronological order (earliest → Baseline).
+const quarterlyNutritionalStatus = (learner) => {
+  const records = measurementRecords(learner)
+    .slice()
+    .sort((left, right) => String(left.date || "").localeCompare(String(right.date || "")));
+  if (!records.length) return QUARTER_LABELS.map((label) => ({ label, status: null }));
+
+  const tagged = records.map((record) => ({ record, label: recordQuarterLabel(record) }));
+  if (tagged.some((entry) => entry.label)) {
+    return QUARTER_LABELS.map((label) => {
+      const entry = tagged.filter((item) => item.label === label).at(-1);
+      return { label, status: entry ? statusForRecord(learner, entry.record) : null };
+    });
+  }
+
+  const latestThree = records.slice(-3);
+  return QUARTER_LABELS.map((label, index) => ({
+    label,
+    status: latestThree[index] ? statusForRecord(learner, latestThree[index]) : null,
+  }));
 };
 
 const fieldValue = (value) => (value === null || value === undefined || String(value).trim() === "" ? "—" : String(value));
@@ -348,13 +491,24 @@ const yesNo = (value) => {
   return "—";
 };
 
+function StatusPill({ label, meta }) {
+  if (!label || label === "—") return <strong className="f137p-status-pill f137p-status-pill-neutral">—</strong>;
+  return <strong className="f137p-status-pill" style={{ color: meta?.color, background: meta?.bg }}>{label}</strong>;
+}
+
 const savedForm137Years = (learner) => {
   const records = learner.form_137_records;
   if (!records || typeof records !== "object" || Array.isArray(records)) return [];
   return Object.keys(records).filter((key) => /^\d{4}-\d{4}$/.test(key)).sort();
 };
 
-const buildFreshForm = (learner) => {
+const schoolYearOptionsFromLearners = (learners) => {
+  const years = new Set([CURRENT_SCHOOL_YEAR]);
+  learners.forEach((learner) => savedForm137Years(learner).forEach((year) => years.add(year)));
+  return Array.from(years).sort().reverse();
+};
+
+const buildFreshForm = (learner, advisorySources) => {
   const names = separateMiddleInitial(learner.first_name, learner.middle_name);
   const gradeNumber = Number(String(learner.grade_level || learner.grade || "").match(/\d+/)?.[0]);
   const freshForm = initialForm();
@@ -370,7 +524,7 @@ const buildFreshForm = (learner) => {
     sex: sex === "MALE" || sex === "FEMALE" ? sex : "",
     records: freshForm.records.map((record, index) => ({
       ...record,
-      adviser: learner.adviser_name || "",
+      adviser: learnerAdviserName(learner, advisorySources),
       ...(index === gradeNumber - 1
         ? { schoolYear: CURRENT_SCHOOL_YEAR, section: learner.section || "" }
         : {}),
@@ -378,7 +532,7 @@ const buildFreshForm = (learner) => {
   };
 };
 
-const resolveFormData = (learner, preferredYear) => {
+const resolveFormData = (learner, preferredYear, advisorySources) => {
   const years = savedForm137Years(learner);
   if (years.length) {
     const activeYear = years.includes(preferredYear) ? preferredYear : (years.includes(CURRENT_SCHOOL_YEAR) ? CURRENT_SCHOOL_YEAR : years.at(-1));
@@ -387,7 +541,7 @@ const resolveFormData = (learner, preferredYear) => {
       return { form: normalizeFormData(entry.data, String(learner.id)), years, activeYear, source: "saved" };
     }
   }
-  return { form: buildFreshForm(learner), years, activeYear: null, source: "fresh" };
+  return { form: buildFreshForm(learner, advisorySources), years, activeYear: null, source: "fresh" };
 };
 
 // ── Page ──
@@ -396,10 +550,13 @@ const DETAIL_TABS = ["Profile", "Form 137"];
 
 export default function Form137Page({ user, onLogout, onBack }) {
   const [learners, setLearners] = useState([]);
+  const [advisorySources, setAdvisorySources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchText, setSearchText] = useState("");
+  const [syFilter, setSyFilter] = useState("");
   const [gradeFilter, setGradeFilter] = useState("");
+  const [adviserFilter, setAdviserFilter] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [activeTab, setActiveTab] = useState(DETAIL_TABS[0]);
   const [selectedYear, setSelectedYear] = useState("");
@@ -408,26 +565,54 @@ export default function Form137Page({ user, onLogout, onBack }) {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    fetchAllSchoolLearners().then((result) => {
+    Promise.all([fetchAllSchoolLearners(), fetchAdviserSources()]).then(([result, advisers]) => {
       if (!active) return;
       if (result.error) setError(result.error.message);
       else setLearners(result.data || []);
+      setAdvisorySources(advisers);
       setLoading(false);
     });
     return () => { active = false; };
   }, []);
 
+  const schoolYearOptions = useMemo(() => schoolYearOptionsFromLearners(learners), [learners]);
+
+  const syFilteredLearners = useMemo(() => {
+    if (!syFilter || syFilter === CURRENT_SCHOOL_YEAR) return learners;
+    return learners.filter((learner) => savedForm137Years(learner).includes(syFilter));
+  }, [learners, syFilter]);
+
+  const gradeFilteredLearners = useMemo(
+    () => syFilteredLearners.filter((learner) => !gradeFilter || learnerGradeKey(learner) === gradeFilter),
+    [syFilteredLearners, gradeFilter],
+  );
+
+  const adviserOptions = useMemo(() => {
+    const names = new Set(gradeFilteredLearners.map((learner) => learnerAdviserName(learner, advisorySources)));
+    return Array.from(names).sort((left, right) => left.localeCompare(right));
+  }, [gradeFilteredLearners, advisorySources]);
+
   const filteredLearners = useMemo(() => {
     const query = searchText.trim().toUpperCase();
-    return learners
-      .filter((learner) => !gradeFilter || learnerGradeKey(learner) === gradeFilter)
+    return gradeFilteredLearners
+      .filter((learner) => !adviserFilter || learnerAdviserName(learner, advisorySources) === adviserFilter)
       .filter((learner) => {
         if (!query) return true;
         const haystack = [learnerName(learner), learner.lrn, learner.registry_no].filter(Boolean).join(" ").toUpperCase();
         return haystack.includes(query);
       })
       .sort((left, right) => learnerName(left).localeCompare(learnerName(right)));
-  }, [learners, searchText, gradeFilter]);
+  }, [gradeFilteredLearners, adviserFilter, searchText, advisorySources]);
+
+  const handleSyChange = (value) => {
+    setSyFilter(value);
+    setGradeFilter("");
+    setAdviserFilter("");
+  };
+  const handleGradeChange = (value) => {
+    setGradeFilter(value);
+    setAdviserFilter("");
+  };
 
   const selectedLearner = useMemo(() => learners.find((learner) => String(learner.id) === selectedId) || null, [learners, selectedId]);
   const selectLearner = (learner) => {
@@ -436,8 +621,14 @@ export default function Form137Page({ user, onLogout, onBack }) {
     setActiveTab("Profile");
   };
 
-  const formResult = useMemo(() => selectedLearner ? resolveFormData(selectedLearner, selectedYear) : null, [selectedLearner, selectedYear]);
-  const status = useMemo(() => selectedLearner ? nutritionalStatus(selectedLearner) : { bmi: "—", hfa: "—" }, [selectedLearner]);
+  const formResult = useMemo(
+    () => selectedLearner ? resolveFormData(selectedLearner, selectedYear, advisorySources) : null,
+    [selectedLearner, selectedYear, advisorySources],
+  );
+  const quarterlyStatus = useMemo(
+    () => selectedLearner ? quarterlyNutritionalStatus(selectedLearner) : QUARTER_LABELS.map((label) => ({ label, status: null })),
+    [selectedLearner],
+  );
 
   const changeZoom = (direction) => setPreviewZoom((current) => {
     const next = Math.round((current + direction * 0.1) * 10) / 10;
@@ -465,16 +656,36 @@ export default function Form137Page({ user, onLogout, onBack }) {
         <div className="f137p-layout">
           <section className="f137p-panel f137p-search-panel">
             <div className="f137p-search-controls">
-              <input
-                type="text"
-                className="f137p-search-input"
-                placeholder="Search by name or LRN…"
-                value={searchText}
-                onChange={(event) => setSearchText(event.target.value)}
-              />
-              <select value={gradeFilter} onChange={(event) => setGradeFilter(event.target.value)}>
+              <div className="f137p-search-input-wrap">
+                <input
+                  type="text"
+                  className="f137p-search-input"
+                  placeholder="Search by name or LRN…"
+                  value={searchText}
+                  onChange={(event) => setSearchText(event.target.value)}
+                />
+                {searchText && (
+                  <button
+                    type="button"
+                    className="f137p-search-clear"
+                    aria-label="Clear search"
+                    onClick={() => setSearchText("")}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              <select value={syFilter} onChange={(event) => handleSyChange(event.target.value)}>
+                <option value="">All School Years</option>
+                {schoolYearOptions.map((year) => <option key={year} value={year}>{year}</option>)}
+              </select>
+              <select value={gradeFilter} onChange={(event) => handleGradeChange(event.target.value)} disabled={!syFilter}>
                 <option value="">All Grades</option>
                 {GRADES.map((grade) => <option key={grade.key} value={grade.key}>{grade.label}</option>)}
+              </select>
+              <select value={adviserFilter} onChange={(event) => setAdviserFilter(event.target.value)} disabled={!gradeFilter}>
+                <option value="">All Advisers</option>
+                {adviserOptions.map((name) => <option key={name || "unassigned"} value={name}>{name || "No Adviser Assigned"}</option>)}
               </select>
             </div>
             <div className="f137p-result-count">
@@ -511,7 +722,7 @@ export default function Form137Page({ user, onLogout, onBack }) {
                     {selectedLearner.photo_url ? <img src={selectedLearner.photo_url} alt="" /> : <div className="f137p-avatar">👤</div>}
                     <div>
                       <h2>{learnerName(selectedLearner)}</h2>
-                      <span>{learnerGradeLabel(selectedLearner)}{selectedLearner.section ? ` • Section ${selectedLearner.section}` : ""} • LRN {fieldValue(selectedLearner.lrn)}</span>
+                      <span>{learnerGradeLabel(selectedLearner)}{sectionShortLabel(selectedLearner) ? ` • ${sectionShortLabel(selectedLearner)}` : ""} • LRN {fieldValue(selectedLearner.lrn)}</span>
                     </div>
                   </div>
                   <div className="f137p-detail-tabs" role="tablist">
@@ -524,7 +735,7 @@ export default function Form137Page({ user, onLogout, onBack }) {
                 {activeTab === "Profile" && (
                   <div className="f137p-profile">
                     <div className="f137p-field-group">
-                      <h3>Personal Information</h3>
+                      <h3><span className="f137p-section-icon" aria-hidden="true">🧑</span>Personal Information</h3>
                       <div className="f137p-field-grid">
                         <div><span>Full Name</span><strong>{learnerName(selectedLearner)}</strong></div>
                         <div><span>LRN</span><strong>{fieldValue(selectedLearner.lrn)}</strong></div>
@@ -537,12 +748,14 @@ export default function Form137Page({ user, onLogout, onBack }) {
                       </div>
                     </div>
 
+                    <div className="f137p-profile-section-label"><span>School Information &amp; Details</span></div>
+
                     <div className="f137p-field-group">
-                      <h3>Academic</h3>
+                      <h3><span className="f137p-section-icon" aria-hidden="true">🎓</span>Academic</h3>
                       <div className="f137p-field-grid">
                         <div><span>Grade Level</span><strong>{learnerGradeLabel(selectedLearner)}</strong></div>
                         <div><span>Section</span><strong>{fieldValue(selectedLearner.section)}</strong></div>
-                        <div><span>Adviser</span><strong>{fieldValue(selectedLearner.adviser_name)}</strong></div>
+                        <div><span>Adviser</span><strong>{fieldValue(learnerAdviserName(selectedLearner, advisorySources))}</strong></div>
                         <div><span>School</span><strong>{fieldValue(selectedLearner.school_name) !== "—" ? selectedLearner.school_name : SCHOOL_DEFAULTS.school}</strong></div>
                         <div><span>School ID</span><strong>{fieldValue(selectedLearner.school_id)}</strong></div>
                         <div><span>4Ps Beneficiary</span><strong>{yesNo(selectedLearner.is_4ps ?? selectedLearner.member_4ps)}</strong></div>
@@ -551,18 +764,18 @@ export default function Form137Page({ user, onLogout, onBack }) {
                     </div>
 
                     <div className="f137p-field-group">
-                      <h3>Family &amp; Guardian</h3>
+                      <h3><span className="f137p-section-icon" aria-hidden="true">👪</span>Family &amp; Guardian</h3>
                       <div className="f137p-field-grid">
                         <div><span>Father's Name</span><strong>{fieldValue(selectedLearner.father_name)}</strong></div>
                         <div><span>Mother's Name</span><strong>{fieldValue(selectedLearner.mother_name)}</strong></div>
                         <div><span>Guardian Name</span><strong>{fieldValue(selectedLearner.guardian_name)}</strong></div>
                         <div><span>Guardian Type</span><strong>{fieldValue(selectedLearner.guardian_type)}</strong></div>
-                        <div><span>Parent Consent</span><strong>{fieldValue(selectedLearner.parent_consent)}</strong></div>
+                        <div><span>Parent Consent</span><strong>{yesNo(selectedLearner.parent_consent)}</strong></div>
                       </div>
                     </div>
 
                     <div className="f137p-field-group">
-                      <h3>Address &amp; Contact</h3>
+                      <h3><span className="f137p-section-icon" aria-hidden="true">📍</span>Address &amp; Contact</h3>
                       <div className="f137p-field-grid">
                         <div className="f137p-span-2"><span>Address</span><strong>{fieldValue(selectedLearner.address)}</strong></div>
                         <div><span>Barangay</span><strong>{fieldValue(barangayOf(selectedLearner))}</strong></div>
@@ -571,15 +784,28 @@ export default function Form137Page({ user, onLogout, onBack }) {
                     </div>
 
                     <div className="f137p-field-group">
-                      <h3>Health &amp; Nutrition</h3>
-                      <div className="f137p-field-grid">
-                        <div><span>BMI Status</span><strong>{status.bmi}</strong></div>
-                        <div><span>Height-for-Age Status</span><strong>{status.hfa}</strong></div>
+                      <h3><span className="f137p-section-icon" aria-hidden="true">⚕️</span>Health &amp; Nutrition</h3>
+                      <div className="f137p-quarters">
+                        {quarterlyStatus
+                          .filter((quarter) => quarter.label !== "Midline" || quarter.status)
+                          .map((quarter) => (
+                            <div className="f137p-quarter-card" key={quarter.label}>
+                              <span className="f137p-quarter-label">{quarter.label}</span>
+                              {quarter.status ? (
+                                <div className="f137p-quarter-pills">
+                                  <div><span>BMI Status</span><StatusPill label={quarter.status.bmi} meta={BAZ_META[quarter.status.bmi]} /></div>
+                                  <div><span>Height-for-Age</span><StatusPill label={quarter.status.hfa} meta={HAZ_META[quarter.status.hfa]} /></div>
+                                </div>
+                              ) : (
+                                <p className="f137p-quarter-empty">No measurement recorded</p>
+                              )}
+                            </div>
+                          ))}
                       </div>
                     </div>
 
                     <div className="f137p-field-group">
-                      <h3>Form 137 Records</h3>
+                      <h3><span className="f137p-section-icon" aria-hidden="true">🗂️</span>Form 137 Records</h3>
                       {formResult.years.length === 0 ? (
                         <p className="f137p-note">No Form 137 has been saved for this learner yet. Opening the Form 137 tab will show a blank SF10-ES pre-filled from enrollment data.</p>
                       ) : (

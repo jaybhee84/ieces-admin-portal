@@ -3,12 +3,15 @@
  * Replaced "Recent MOOE" section with Org Chart module card.
  */
 import Topbar from "../components/Topbar";
+import orgChartIcon from "../image/org.png";
+import enrollmentIcon from "../image/enrol.png";
 import "./Dashboard.css";
 
 const MODULES = [
   {
     id: "enrollment",
-    icon: "📋",
+    icon: null,
+    iconImg: enrollmentIcon,
     label: "Enrollment",
     desc: "Monitor daily learner enrollment with grade-level, gender, and 4Ps breakdowns.",
     badge: "active",
@@ -24,8 +27,9 @@ const MODULES = [
   },
   {
     id: "orgchart",
-    icon: "🏫",
-    label: "Org Chart",
+    icon: null,
+    iconImg: orgChartIcon,
+    label: "Organizational Chart",
     desc: "Manage the school's organizational chart — add staff photos, positions, grade assignments, and substitutes.",
     badge: "active",
     badgeText: "✅ Active",
@@ -79,7 +83,9 @@ export default function Dashboard({ user, onLogout, onNavigate, addToast, showCo
               className="module-card"
               onClick={() => handleCard(m.id)}
             >
-              <div className="mc-icon">{m.icon}</div>
+              <div className="mc-icon">
+                {m.iconImg ? <img src={m.iconImg} alt="" /> : m.icon}
+              </div>
               <div className="mc-label">{m.label}</div>
               <div className="mc-desc">{m.desc}</div>
               <span className={`mc-badge badge-${m.badge}`}>{m.badgeText}</span>
@@ -94,15 +100,39 @@ export default function Dashboard({ user, onLogout, onNavigate, addToast, showCo
           </div>
           <div className="tips-grid">
             <div className="tip-card">
-              <div className="tip-icon">🏫</div>
+              <div className="tip-icon"><img src={enrollmentIcon} alt="" /></div>
               <div className="tip-text">
-                <strong>Org Chart:</strong> Add staff photos, assign grade levels, mark Grade Chairmen, and set substitute expiry dates. Expired substitutes auto-hide on the public website.
+                <strong>Enrollment:</strong> Monitor daily learner enrollment and watch grade-level, gender, and 4Ps breakdowns update automatically as new learners are added.
               </div>
             </div>
             <div className="tip-card">
               <div className="tip-icon">📊</div>
               <div className="tip-text">
                 <strong>MOOE Report:</strong> Encode monthly liquidation entries. Upload official receipts for transparency and audit compliance.
+              </div>
+            </div>
+            <div className="tip-card">
+              <div className="tip-icon"><img src={orgChartIcon} alt="" /></div>
+              <div className="tip-text">
+                <strong>Organizational Chart:</strong> Add staff photos, assign grade levels, mark Grade Chairmen, and set substitute expiry dates. Expired substitutes auto-hide on the public website.
+              </div>
+            </div>
+            <div className="tip-card">
+              <div className="tip-icon">🖼️</div>
+              <div className="tip-text">
+                <strong>Media and Homepage:</strong> Approve or edit submitted news articles and adjust the homepage photo slideshow, including cropping and focal point.
+              </div>
+            </div>
+            <div className="tip-card">
+              <div className="tip-icon">📣</div>
+              <div className="tip-text">
+                <strong>School Bulletin:</strong> Publish class suspensions, office orders, and other official notices straight to the public website.
+              </div>
+            </div>
+            <div className="tip-card">
+              <div className="tip-icon">📄</div>
+              <div className="tip-text">
+                <strong>Form 137 &amp; Learner Records:</strong> Search any learner by name or LRN, review their complete profile, and print a ready-to-sign SF10-ES.
               </div>
             </div>
           </div>

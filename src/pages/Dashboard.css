@@ -45,30 +45,31 @@
   .module-grid-3 { grid-template-columns: 1fr 1fr; }
 }
 .module-card {
-  background: white;
+  background: var(--maroon);
   border-radius: 14px;
   padding: 28px 24px;
-  border: 2px solid transparent;
-  box-shadow: 0 2px 16px rgba(123,26,26,0.08);
+  border: 3px solid var(--gold);
+  box-shadow: 0 2px 16px rgba(123,26,26,0.16);
   cursor: pointer;
-  transition: border .2s, transform .15s, box-shadow .2s;
+  transition: background .2s, transform .15s, box-shadow .2s;
   text-align: center;
 }
 .module-card:hover {
-  border-color: #7b1a1a;
+  background: var(--maroon-dark);
   transform: translateY(-3px);
-  box-shadow: 0 8px 32px rgba(123,26,26,0.14);
+  box-shadow: 0 8px 32px rgba(123,26,26,0.3);
 }
 .mc-icon { font-size: 2.6rem; margin-bottom: 12px; }
+.mc-icon img { width: 68px; height: 68px; object-fit: contain; }
 .mc-label {
   font-size: 1rem;
   font-weight: 800;
-  color: #7b1a1a;
+  color: var(--gold);
   margin-bottom: 6px;
 }
 .mc-desc {
   font-size: 0.76rem;
-  color: #7a6060;
+  color: rgba(255,255,255,0.82);
   line-height: 1.5;
   margin-bottom: 14px;
 }
@@ -133,6 +134,7 @@
   box-shadow: 0 1px 6px rgba(123,26,26,0.07);
 }
 .tip-icon { font-size: 1.4rem; flex-shrink: 0; }
+.tip-icon img { width: 22px; height: 22px; object-fit: contain; }
 .tip-text {
   font-size: 0.76rem;
   color: #7a6060;
