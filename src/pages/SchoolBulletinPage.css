@@ -1,5 +1,5 @@
 .bulletin-root { height: 100vh; min-width: 0; overflow-x: hidden; display: flex; flex-direction: column; background: #f7f3f1; }
-.bulletin-body { flex: 1; min-width: 0; overflow-x: hidden; overflow-y: auto; width: calc(100% - 40px); max-width: 1000px; margin: 0 auto; padding: 30px 0 48px; display: grid; gap: 22px; }
+.bulletin-body { flex: 1; min-height: 0; min-width: 0; overflow-x: hidden; overflow-y: auto; width: calc(100% - 40px); max-width: 1000px; margin: 0 auto; padding: 30px 0 48px; display: grid; align-content: start; grid-auto-rows: max-content; gap: 22px; }
 .bulletin-hero { position: relative; min-width: 0; width: 100%; overflow: hidden; padding: 26px; border: 1px solid rgba(245,197,24,.65); border-radius: 16px; color: white; background: linear-gradient(135deg, #7b1a1a, #4c0d15); display: flex; align-items: center; gap: 16px; }
 .bulletin-hero::after { content: ""; position: absolute; width: 180px; height: 180px; right: -65px; top: -90px; border-radius: 50%; background: rgba(245,197,24,.13); }
 .bulletin-hero span { color: #fde68a; font-size: .68rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
@@ -46,6 +46,7 @@
 .bulletin-status.expired-label { color: #9f1239; background: #ffe4e6; }
 .bulletin-row h2 { margin: 9px 0 5px; color: #351414; font-size: .98rem; }
 .bulletin-row p { margin: 0 0 8px; color: #745f5f; font-size: .78rem; line-height: 1.5; }
+.bulletin-notice-body { white-space: pre-wrap; overflow-wrap: anywhere; }
 .bulletin-row-file { display: block; width: fit-content; margin: 0 0 8px; font-size: .74rem; }
 .bulletin-row small { color: #9a8686; font-size: .66rem; }
 .bulletin-row-actions { display: flex; gap: 7px; }

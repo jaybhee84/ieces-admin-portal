@@ -14,7 +14,7 @@ const EMPTY_FORM = {
   body: "",
   priority: "normal",
   expires_at: "",
-  is_published: false,
+  is_published: true,
   attachment_file: null,
   attachment_url: "",
   attachment_name: "",
@@ -42,6 +42,7 @@ export default function SchoolBulletinPage({ user, onLogout, onBack, addToast, s
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef(null);
+  const listRef = useRef(null);
 
   const loadAnnouncements = useCallback(async () => {
     setError("");
@@ -85,6 +86,11 @@ export default function SchoolBulletinPage({ user, onLogout, onBack, addToast, s
     const title = form.title_type === "Others" ? form.custom_title.trim() : form.title_type;
     if (!title) {
       addToast("Enter a title for the notice.", "warning");
+      return;
+    }
+
+    if (form.is_published && form.expires_at && new Date(form.expires_at) <= new Date()) {
+      addToast("Choose a future expiry date or clear it before publishing.", "warning");
       return;
     }
 
@@ -140,8 +146,8 @@ export default function SchoolBulletinPage({ user, onLogout, onBack, addToast, s
     };
 
     const result = editingId
-      ? await supabase.from(TABLE).update(payload).eq("id", editingId)
-      : await supabase.from(TABLE).insert({ ...payload, created_by: user?.email || null });
+      ? await supabase.from(TABLE).update(payload).eq("id", editingId).select().single()
+      : await supabase.from(TABLE).insert({ ...payload, created_by: user?.email || null }).select().single();
 
     setSaving(false);
     if (result.error) {
@@ -157,9 +163,11 @@ export default function SchoolBulletinPage({ user, onLogout, onBack, addToast, s
       await supabase.storage.from(BUCKET).remove([previousPath]);
     }
 
-    addToast(editingId ? "Announcement updated." : "Announcement created.", "success");
+    setAnnouncements((current) => [result.data, ...current.filter((item) => item.id !== result.data.id)]);
+    addToast(form.is_published ? "Announcement published. It is available to the website." : "Draft saved. Publish it to show it on the website.", "success");
     resetForm();
     await loadAnnouncements();
+    listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const editAnnouncement = (announcement) => {
@@ -185,6 +193,11 @@ export default function SchoolBulletinPage({ user, onLogout, onBack, addToast, s
 
   const togglePublished = async (announcement) => {
     const publish = !announcement.is_published;
+    if (publish && announcement.expires_at && new Date(announcement.expires_at) <= new Date()) {
+      addToast("Edit this notice and clear or extend its expiry date before publishing.", "warning");
+      editAnnouncement(announcement);
+      return;
+    }
     const { error: updateError } = await supabase
       .from(TABLE)
       .update({
@@ -192,7 +205,7 @@ export default function SchoolBulletinPage({ user, onLogout, onBack, addToast, s
         published_at: publish ? announcement.published_at || new Date().toISOString() : null,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", announcement.id);
+      .eq("id", announcement.id).select().single();
 
     if (updateError) addToast(updateError.message || "Could not change publication status.", "error", 5000);
     else addToast(publish ? "Announcement published." : "Announcement returned to draft.", "success");
@@ -291,12 +304,12 @@ export default function SchoolBulletinPage({ user, onLogout, onBack, addToast, s
             <span><strong>Publish immediately</strong><small>Make this notice visible on Project Rising after saving.</small></span>
           </label>
           <div className="bulletin-form-actions">
-            <button className="bulletin-button primary" type="submit" disabled={saving}>{saving ? "Saving…" : editingId ? "Save changes" : "Create announcement"}</button>
+            <button className="bulletin-button primary" type="submit" disabled={saving}>{saving ? "Saving…" : editingId ? "Save changes" : form.is_published ? "Post announcement" : "Save draft"}</button>
           </div>
         </form>
 
-        <div className="bulletin-list-heading">
-          <div><strong>Announcements</strong><span>{announcements.length} total</span></div>
+        <div className="bulletin-list-heading" ref={listRef}>
+          <div><strong>Posted announcements and drafts</strong><span>{announcements.length} total · Edit a notice below to update it.</span></div>
           <button type="button" className="bulletin-button ghost" onClick={loadAnnouncements} disabled={loading}>Refresh</button>
         </div>
 
@@ -319,6 +332,9 @@ export default function SchoolBulletinPage({ user, onLogout, onBack, addToast, s
                     </div>
                     <h2>{announcement.title}</h2>
                     {announcement.summary && <p>{announcement.summary}</p>}
+                    {announcement.body && <p className="bulletin-notice-body">{announcement.body}</p>}
+                    {!announcement.is_published && <p>Draft — publish this notice to show it on the website.</p>}
+                    {expired && <p>Hidden from the website because this notice has expired.</p>}
                     {announcement.attachment_url && <a className="bulletin-row-file" href={announcement.attachment_url} target="_blank" rel="noreferrer">📎 {announcement.attachment_name || "View attachment"}</a>}
                     <small>Created {formatDate(announcement.created_at)}{announcement.expires_at ? ` · Expires ${formatDate(announcement.expires_at)}` : ""}</small>
                   </div>
