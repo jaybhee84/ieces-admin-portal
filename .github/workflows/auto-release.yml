@@ -54,9 +54,9 @@ jobs:
         id: check_release
         shell: powershell
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          cmd /c "gh release view $env:VERSION --repo $env:GITHUB_REPOSITORY >nul 2>nul"
+          cmd /c "gh release view $env:VERSION --repo buzzjay84/ieces-admin-portal >nul 2>nul"
           $releaseExists = $LASTEXITCODE -eq 0
           $global:LASTEXITCODE = 0
           if ($releaseExists) {
@@ -88,4 +88,4 @@ jobs:
         if: steps.check_release.outputs.exists == 'false'
         run: npx electron-builder --win --publish always
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
