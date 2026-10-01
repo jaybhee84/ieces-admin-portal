@@ -7,12 +7,17 @@ export default defineConfig({
     react(),
     electron({
       entry: 'electron/main.cjs',
+      onstart({ startup }) {
+        const env = { ...process.env }
+        delete env.ELECTRON_RUN_AS_NODE
+        startup(['.'], { env })
+      },
     }),
   ],
   base: './',
   build: {
     outDir: 'dist',
-    rollupOptions: {
+    rolldownOptions: {
       external: ['electron', 'better-sqlite3', 'path', 'fs', 'os']
     }
   },

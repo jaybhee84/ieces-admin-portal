@@ -8,9 +8,13 @@
     "url": "https://github.com/jaybhee84/ieces-admin-portal.git"
   },
   "main": "electron/main.cjs",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "vite",
     "electron:dev": "vite",
+    "dev:electron": "npm run electron:dev",
     "build": "vite build",
     "preview": "vite preview",
     "electron": "electron .",
@@ -19,21 +23,21 @@
     "release": "npm run build && electron-builder --publish always"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.0.0",
-    "@vitejs/plugin-react": "^4.3.1",
-    "concurrently": "^9.0.1",
-    "electron": "^32.0.0",
-    "electron-builder": "^25.0.5",
-    "vite": "^5.4.8",
-    "vite-plugin-electron": "^0.28.6",
-    "wait-on": "^8.0.1"
+    "@electron/rebuild": "^4.2.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "vite": "^8.3.2",
+    "vite-plugin-electron": "^1.1.2",
+    "wait-on": "^9.5.1"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.112.2",
+    "@supabase/supabase-js": "^2.117.2",
     "electron-updater": "^6.8.9",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.27.0"
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4"
   },
   "build": {
     "appId": "com.ieces.adminportal",
