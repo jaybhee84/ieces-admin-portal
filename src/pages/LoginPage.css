@@ -137,9 +137,30 @@
 }
 
 /* RIGHT PANEL */
-.login-right {
+/* Right half: looping video behind the sign-in card */
+.login-right-wrap {
   flex: 1;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
   background: #faf8f6;
+}
+
+.login-bg-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  /* The clip has black bars baked in above and below; zoom in to crop them out */
+  transform: scale(1.24);
+}
+
+.login-right {
+  position: relative;
+  height: 100%;
+  background: rgba(20, 6, 6, 0.42);
   display: flex;
   flex-direction: column;
   align-items: center;

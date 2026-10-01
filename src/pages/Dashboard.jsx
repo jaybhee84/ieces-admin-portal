@@ -7,6 +7,9 @@ import orgChartIcon from "../image/org.png";
 import enrollmentIcon from "../image/enrol.png";
 import "./Dashboard.css";
 
+// Public school website (currently the Vercel-hosted build)
+const SCHOOL_WEBSITE_URL = "https://project-rising-xi.vercel.app/";
+
 const MODULES = [
   {
     id: "enrollment",
@@ -15,7 +18,7 @@ const MODULES = [
     label: "Enrollment",
     desc: "Monitor daily learner enrollment with grade-level, gender, and 4Ps breakdowns.",
     badge: "active",
-    badgeText: "✅ Active",
+    badgeText: "Active",
   },
   {
     id: "mooe",
@@ -23,7 +26,7 @@ const MODULES = [
     label: "MOOE Report",
     desc: "Encode monthly MOOE expenses and liquidation reports for budget transparency.",
     badge: "active",
-    badgeText: "✅ Active",
+    badgeText: "Active",
   },
   {
     id: "orgchart",
@@ -32,7 +35,7 @@ const MODULES = [
     label: "Organizational Chart",
     desc: "Manage the school's organizational chart — add staff photos, positions, grade assignments, and substitutes.",
     badge: "active",
-    badgeText: "✅ Active",
+    badgeText: "Active",
   },
   {
     id: "media-manager",
@@ -40,7 +43,7 @@ const MODULES = [
     label: "Media and Homepage",
     desc: "Approve submitted news articles and manage the photo slideshow on the school website homepage.",
     badge: "active",
-    badgeText: "✅ Active",
+    badgeText: "Active",
   },
   {
     id: "school-bulletin",
@@ -48,7 +51,7 @@ const MODULES = [
     label: "School Bulletin",
     desc: "Publish class suspensions, office orders, and other official notices to the public website.",
     badge: "active",
-    badgeText: "✅ Active",
+    badgeText: "Active",
   },
   {
     id: "form137",
@@ -56,7 +59,15 @@ const MODULES = [
     label: "Form 137 & Learner Records",
     desc: "Search the full learner database, review a learner's complete record, and print their SF10-ES / Form 137 — for the school AO/Registrar.",
     badge: "active",
-    badgeText: "✅ Active",
+    badgeText: "Active",
+  },
+  {
+    id: "teaching-load",
+    icon: "🗓️",
+    label: "Teaching Load",
+    desc: "Schedule classes per teacher and section, and check daily teaching minutes for the e-SF7 Daily Program.",
+    badge: "active",
+    badgeText: "Active",
   },
 ];
 
@@ -74,14 +85,34 @@ export default function Dashboard({ user, onLogout, onNavigate, addToast, showCo
             <div className="dw-title">Welcome back, {user?.name || "Admin"} 👋</div>
             <div className="dw-sub">Isabela East Central Elementary School</div>
           </div>
+          <a
+            className="dash-site-link"
+            href={SCHOOL_WEBSITE_URL}
+            target="_blank"
+            rel="noreferrer"
+            title={SCHOOL_WEBSITE_URL}
+          >
+            🌐 Visit School Website <span className="dsl-arrow">↗</span>
+          </a>
         </div>
 
+        <div className="ds-header">
+          <span className="ds-title">Modules</span>
+        </div>
         <div className="module-grid module-grid-3">
           {MODULES.map((m) => (
             <div
               key={m.id}
               className="module-card"
+              role="button"
+              tabIndex={0}
               onClick={() => handleCard(m.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleCard(m.id);
+                }
+              }}
             >
               <div className="mc-icon">
                 {m.iconImg ? <img src={m.iconImg} alt="" /> : m.icon}
@@ -133,6 +164,12 @@ export default function Dashboard({ user, onLogout, onNavigate, addToast, showCo
               <div className="tip-icon">📄</div>
               <div className="tip-text">
                 <strong>Form 137 &amp; Learner Records:</strong> Search any learner by name or LRN, review their complete profile, and print a ready-to-sign SF10-ES.
+              </div>
+            </div>
+            <div className="tip-card">
+              <div className="tip-icon">🗓️</div>
+              <div className="tip-text">
+                <strong>Teaching Load:</strong> Add each teacher's periods by subject, section, and time. Overlapping periods and days over 6 teaching hours are flagged.
               </div>
             </div>
           </div>

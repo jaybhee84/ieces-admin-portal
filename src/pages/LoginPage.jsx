@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import iecesLogo from "../image/ieceslogo.png";
+import loginVideo from "../image/video.mp4";
 import "./LoginPage.css";
 
 export default function LoginPage({ onLoginSuccess }) {
@@ -50,15 +51,26 @@ export default function LoginPage({ onLoginSuccess }) {
       </div>
 
       {/* Right panel */}
-      <div className="login-right">
-        {view === "login" ? (
-          <LoginForm
-            onGoRegister={() => setView("register")}
-            onLoginSuccess={onLoginSuccess}
-          />
-        ) : (
-          <RegisterForm onGoLogin={() => setView("login")} />
-        )}
+      <div className="login-right-wrap">
+        <video
+          className="login-bg-video"
+          src={loginVideo}
+          autoPlay
+          muted
+          loop
+          playsInline
+          aria-hidden="true"
+        />
+        <div className="login-right">
+          {view === "login" ? (
+            <LoginForm
+              onGoRegister={() => setView("register")}
+              onLoginSuccess={onLoginSuccess}
+            />
+          ) : (
+            <RegisterForm onGoLogin={() => setView("login")} />
+          )}
+        </div>
       </div>
     </div>
   );

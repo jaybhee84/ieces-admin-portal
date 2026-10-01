@@ -9,17 +9,39 @@
 .dash-body {
   flex: 1;
   overflow-y: auto;
-  padding: 28px 32px;
-  max-width: 1000px;
-  margin: 0 auto;
+  padding: 28px max(32px, calc((100% - 1600px) / 2));
   width: 100%;
+  scrollbar-width: none;
 }
+.dash-body::-webkit-scrollbar { display: none; }
 
 .dash-welcome {
-  margin-bottom: 28px;
-  padding-bottom: 20px;
-  border-bottom: 1.5px solid #e8ddd8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #e8ddd8;
 }
+.dash-site-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #d9c8c2;
+  background: white;
+  color: #7b1a1a;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background .15s, border-color .15s;
+}
+.dash-site-link:hover { background: #fbf3ef; border-color: #7b1a1a; }
+.dash-site-link:focus-visible { outline: 2px solid var(--gold-dark); outline-offset: 2px; }
+.dash-site-link .dsl-arrow { font-size: 0.9rem; line-height: 1; }
 .dw-title {
   font-size: 1.25rem;
   font-weight: 900;
@@ -41,44 +63,73 @@
 .module-grid-3 {
   grid-template-columns: 1fr 1fr 1fr;
 }
+/* Seven modules: 4 + 3 on wide windows instead of a lone card on a third row */
+@media (min-width: 1300px) {
+  .module-grid-3 { grid-template-columns: repeat(4, 1fr); }
+}
 @media (max-width: 700px) {
   .module-grid-3 { grid-template-columns: 1fr 1fr; }
 }
 .module-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   background: var(--maroon);
-  border-radius: 14px;
-  padding: 28px 24px;
-  border: 3px solid var(--gold);
-  box-shadow: 0 2px 16px rgba(123,26,26,0.16);
+  border-radius: 12px;
+  padding: 26px 24px 22px;
+  border: 2px solid var(--gold);
+  box-shadow: 0 1px 6px rgba(123,26,26,0.14);
   cursor: pointer;
   transition: background .2s, transform .15s, box-shadow .2s;
   text-align: center;
 }
 .module-card:hover {
   background: var(--maroon-dark);
-  transform: translateY(-3px);
-  box-shadow: 0 8px 32px rgba(123,26,26,0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(123,26,26,0.26);
 }
-.mc-icon { font-size: 2.6rem; margin-bottom: 12px; }
+.module-card:focus-visible { outline: 3px solid var(--gold-light); outline-offset: 2px; }
+/* Fixed icon box so emoji and image icons line the labels up across a row */
+.mc-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 68px;
+  font-size: 2.8rem;
+  line-height: 1;
+  margin-bottom: 14px;
+}
 .mc-icon img { width: 68px; height: 68px; object-fit: contain; }
 .mc-label {
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 800;
   color: var(--gold);
   margin-bottom: 6px;
 }
 .mc-desc {
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   color: rgba(255,255,255,0.82);
-  line-height: 1.5;
-  margin-bottom: 14px;
+  line-height: 1.55;
+  max-width: 44ch;
+  margin-bottom: 16px;
 }
+/* Pinned to the card bottom so badges align regardless of description length */
 .mc-badge {
-  display: inline-block;
-  padding: 4px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding: 3px 12px;
   border-radius: 20px;
   font-size: 0.7rem;
   font-weight: 700;
+}
+.mc-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 .badge-wip    { background: #fde68a; color: #92400e; }
 .badge-active { background: #dcfce7; color: #166534; }
@@ -123,10 +174,13 @@
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
+@media (min-width: 1300px) {
+  .tips-grid { grid-template-columns: 1fr 1fr 1fr; }
+}
 .tip-card {
   background: white;
-  border-radius: 10px;
-  padding: 16px;
+  border-radius: 8px;
+  padding: 14px 16px;
   display: flex;
   align-items: flex-start;
   gap: 12px;
