@@ -94,9 +94,24 @@ const TEACHING_POSITIONS = [
   "Master Teacher III",
   "Master Teacher IV",
   "Master Teacher V",
+  // Special Education Teacher (SPET) items
+  "Special Education Teacher I",
+  "Special Education Teacher II",
+  "Special Education Teacher III",
+  "Special Education Teacher IV",
+  "Special Education Teacher V",
+  // Head Teachers who still handle classes; those in school administration use the Administration category
+  "Head Teacher I",
+  "Head Teacher II",
+  "Head Teacher III",
+  "Head Teacher IV",
+  "Head Teacher V",
+  "Head Teacher VI",
 ];
 
-const TEACHING_TYPES = ["Adviser", "Subject Teacher", "ALS", "ALIVE"];
+const TEACHING_TYPES = ["Adviser", "Subject Teacher", "ALS", "ALIVE", "SNED"];
+// Teacher types that are their own assignment: the grade level follows the type
+const FIXED_ASSIGNMENT_TYPES = ["ALS", "ALIVE", "SNED"];
 
 const JO_POSITIONS = [
   "Security Guard / Watchman",
@@ -178,6 +193,12 @@ function getDisplayName(person) {
   return `${first}${middle ? " " + middle : ""} ${family}`.trim();
 }
 
+// Initials shown when a person has no photo
+function getInitials(person) {
+  const { first, family } = parsePersonName(person);
+  return `${first.charAt(0)}${family.charAt(0)}` || "?";
+}
+
 // Returns ★ badges based on admin position rank
 function getAdminStars(position) {
   if (!position) return null;
@@ -212,6 +233,30 @@ function hasRole(person, terms) {
   return terms.some((term) => role.includes(term));
 }
 
+// ─── chart zoom ───────────────────────────────────────────────────────────────
+const ZOOM_MIN = 0.3;
+const ZOOM_MAX = 1.6;
+const ZOOM_STEP = 0.1;
+const ZOOM_STORAGE_KEY = "oc-zoom";
+const clampZoom = (value) => Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value)) * 100) / 100;
+
+function hasSavedZoom() {
+  try {
+    return localStorage.getItem(ZOOM_STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function readZoom() {
+  try {
+    const stored = Number(localStorage.getItem(ZOOM_STORAGE_KEY));
+    return stored ? clampZoom(stored) : 1;
+  } catch {
+    return 1;
+  }
+}
+
 // ─── empty form ───────────────────────────────────────────────────────────────
 const EMPTY = {
   family_name: "",
@@ -230,57 +275,62 @@ const EMPTY = {
   photo_url: "",
 };
 
-// ─── StaffCard mini ──────────────────────────────────────────────────────────
-function StaffCard({ person, onEdit, onDelete }) {
+// ─── StaffNode ───────────────────────────────────────────────────────────────
+// One person in the chart. "lead" and "node" are the boxes of the upper levels;
+// "leaf" is the compact row used inside a group column.
+function StaffNode({ person, variant = "leaf", detail, onEdit, onDelete }) {
   const expired = isSubExpired(person);
   const displayName = getDisplayName(person);
+  const stars = person.category === "admin" ? getAdminStars(person.admin_position) : null;
+  const position =
+    detail ??
+    (person.category === "admin"
+      ? person.is_designated
+        ? `Designated ${person.admin_position}`
+        : person.admin_position
+      : person.category === "teaching"
+        ? person.teaching_position || ""
+        : person.admin_position || "Job Order");
 
   return (
-    <div className={`oc-staff-card ${expired ? "oc-expired" : ""}`}>
-      <div className="oc-photo-wrap">
+    <div
+      className={`oc-node oc-node-${variant}${expired ? " oc-expired" : ""}${person.is_grade_chairman ? " oc-chairman" : ""}`}
+    >
+      <div className="oc-node-photo">
         {person.photo_url ? (
-          <img src={person.photo_url} alt={displayName} />
+          <img src={person.photo_url} alt="" />
         ) : (
-          <div className="oc-no-photo">👤</div>
-        )}
-        {expired && <div className="oc-expired-badge">Expired</div>}
-        {person.is_grade_chairman && (
-          <div className="oc-chairman-badge">⭐ Grade Chairman</div>
+          <div className="oc-initials" aria-hidden="true">{getInitials(person)}</div>
         )}
       </div>
-      <div className="oc-info">
-        <div className="oc-name">{displayName}</div>
-        <div className="oc-pos">
-          {person.category === "admin" ? (
-            <span className="oc-pos-admin">
-              {getAdminStars(person.admin_position) && (
-                <span className="oc-stars">
-                  {getAdminStars(person.admin_position)}
-                </span>
-              )}
-              {person.is_designated
-                ? `Designated ${person.admin_position}`
-                : person.admin_position}
-            </span>
-          ) : person.category === "teaching" ? (
-            `${person.teaching_position || ""} · ${person.grade_level} — ${person.teaching_type}`
-          ) : (
-            person.admin_position || "Job Order"
-          )}
+      <div className="oc-node-info">
+        <div className="oc-node-name" title={displayName}>{displayName}</div>
+        <div className="oc-node-pos">
+          {stars && <span className="oc-stars">{stars}</span>}
+          {position}
         </div>
+        {person.is_grade_chairman && <div className="oc-node-tag chairman">Grade Chairman</div>}
         {person.status === "substitute" && (
-          <div className="oc-sub-tag">
-            Substitute · {formatDate(person.sub_expiry_start)} –{" "}
-            {formatDate(person.sub_expiry_end)}
+          <div className="oc-node-tag">
+            {expired ? "Expired · " : ""}
+            {formatDate(person.sub_expiry_start)} – {formatDate(person.sub_expiry_end)}
           </div>
         )}
       </div>
-      <div className="oc-actions">
-        <button className="oc-btn-edit" onClick={() => onEdit(person)}>
-          ✏️
+      <div className="oc-node-actions">
+        <button type="button" aria-label={`Edit ${displayName}`} title="Edit" onClick={() => onEdit(person)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
         </button>
-        <button className="oc-btn-del" onClick={() => onDelete(person)}>
-          🗑️
+        <button type="button" className="danger" aria-label={`Remove ${displayName}`} title="Remove" onClick={() => onDelete(person)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 6h18" />
+            <path d="M8 6V4h8v2" />
+            <path d="M19 6l-1 14H6L5 6" />
+            <path d="M10 11v6M14 11v6" />
+          </svg>
         </button>
       </div>
     </div>
@@ -304,6 +354,94 @@ export default function OrgChartPage({
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState("");
   const fileRef = useRef();
+  const bodyRef = useRef(null);
+  const chartRef = useRef(null);
+  const scrollRef = useRef(null);
+  const [zoom, setZoom] = useState(readZoom);
+
+  const changeZoom = (next) => {
+    const value = clampZoom(typeof next === "function" ? next(zoom) : next);
+    setZoom(value);
+    try {
+      localStorage.setItem(ZOOM_STORAGE_KEY, String(value));
+    } catch {
+      // The zoom still applies for this session
+    }
+  };
+
+  // Fit the whole chart's width inside the window
+  const fitZoom = () => {
+    const chart = chartRef.current;
+    const body = bodyRef.current;
+    if (!chart || !body) return;
+    const shownWidth = chart.getBoundingClientRect().width;
+    const available = body.clientWidth - 56;
+    if (shownWidth > 0) changeZoom(Math.floor(((zoom * available) / shownWidth) * 20) / 20);
+  };
+
+  // On opening, a chart with no saved zoom is fitted to the window; otherwise it starts centered on the head
+  useEffect(() => {
+    if (loading || !chartRef.current) return;
+    if (!hasSavedZoom()) fitZoom();
+    const scroller = scrollRef.current;
+    if (scroller) scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
+    // Runs once, when the staff list first appears
+  }, [loading]);
+
+  // Drag the chart with the mouse to pan: sideways in the chart, up and down in the page
+  const panStart = useRef(null);
+  const [panning, setPanning] = useState(false);
+
+  const startPan = (event) => {
+    if (event.button !== 0 || event.target.closest("button")) return;
+    panStart.current = {
+      x: event.clientX,
+      y: event.clientY,
+      left: scrollRef.current.scrollLeft,
+      top: bodyRef.current.scrollTop,
+    };
+  };
+
+  const movePan = (event) => {
+    const start = panStart.current;
+    if (!start) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    // A small movement is still a click, not a drag
+    if (!panning && Math.abs(dx) + Math.abs(dy) < 4) return;
+    if (!panning) {
+      setPanning(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    scrollRef.current.scrollLeft = start.left - dx;
+    bodyRef.current.scrollTop = start.top - dy;
+  };
+
+  const endPan = () => {
+    panStart.current = null;
+    setPanning(false);
+  };
+
+  // Ctrl + mouse wheel zooms the chart; a plain wheel still scrolls
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return undefined;
+    const onWheel = (event) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      setZoom((current) => {
+        const value = clampZoom(current + (event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP));
+        try {
+          localStorage.setItem(ZOOM_STORAGE_KEY, String(value));
+        } catch {
+          // The zoom still applies for this session
+        }
+        return value;
+      });
+    };
+    body.addEventListener("wheel", onWheel, { passive: false });
+    return () => body.removeEventListener("wheel", onWheel);
+  }, []);
 
   // ── fetch ──────────────────────────────────────────────────────────────────
   const fetchStaff = async () => {
@@ -529,6 +667,34 @@ export default function OrgChartPage({
     (s) => !watchmenAndUtility.some((person) => person.id === s.id),
   );
 
+  // ── chart levels: district → school head → administration → groups ───────
+  const [schoolHead, ...belowHead] = adminStaff;
+  // Assistant principals sit directly under the school head; the rest of the administration is under them
+  const isAssistantHead = (p) => String(p.admin_position || "").startsWith("Assistant Principal");
+  const assistantHeads = belowHead.filter(isAssistantHead);
+  const otherAdmin = belowHead.filter((p) => !isAssistantHead(p));
+  const chairmanFirst = (list) =>
+    [...list].sort((a, b) => Number(Boolean(b.is_grade_chairman)) - Number(Boolean(a.is_grade_chairman)));
+  const teachingDetail = (p) => [p.teaching_position, p.grade_level].filter(Boolean).join(" · ");
+  const chartGroups = [
+    ...GRADE_LEVELS.filter((gl) => gl !== "ALS" && gl !== "ALIVE").map((gl) => ({
+      label: gl,
+      people: chairmanFirst(
+        teachingAdvisers.filter((t) => t.grade_level === gl || (gl === "SNED" && t.grade_level === "SPED")),
+      ),
+    })),
+    { label: "Subject Teachers", people: subjectTeachers, detail: teachingDetail },
+    { label: "ALS", people: [...alsCoordinators, ...alsTeachers.filter((t) => !alsCoordinators.includes(t))] },
+    { label: "ALIVE", people: aliveTeachers },
+    {
+      label: "Substitutes",
+      people: substitutes,
+      detail: (p) => (p.category === "teaching" ? teachingDetail(p) : p.admin_position || ""),
+    },
+    { label: "Support Staff", people: otherSupport },
+    { label: "Watchmen & Utility", people: watchmenAndUtility },
+  ].filter((group) => group.people.length > 0);
+
   const f = form;
   const set = (k, v) => setForm((prev) => ({ ...prev, [k]: v }));
 
@@ -542,7 +708,7 @@ export default function OrgChartPage({
         title="Organizational Chart"
       />
 
-      <div className="oc-body">
+      <div className="oc-body" ref={bodyRef}>
         {/* Header row */}
         <div className="oc-page-hdr">
           <div>
@@ -552,166 +718,112 @@ export default function OrgChartPage({
               Isabela East Central Elementary School
             </div>
           </div>
-          <button className="oc-add-btn" onClick={openAdd}>
-            + Add Staff
-          </button>
+          <div className="oc-hdr-actions">
+            <div className="oc-zoom" role="group" aria-label="Chart zoom" title="Ctrl + mouse wheel also zooms">
+              <button type="button" aria-label="Zoom out" onClick={() => changeZoom((value) => value - ZOOM_STEP)} disabled={zoom <= ZOOM_MIN}>−</button>
+              <button type="button" className="oc-zoom-value" title="Reset to 100%" onClick={() => changeZoom(1)}>{Math.round(zoom * 100)}%</button>
+              <button type="button" aria-label="Zoom in" onClick={() => changeZoom((value) => value + ZOOM_STEP)} disabled={zoom >= ZOOM_MAX}>+</button>
+              <button type="button" className="oc-zoom-fit" title="Fit the chart to the window width" onClick={fitZoom}>Fit</button>
+            </div>
+            <button className="oc-add-btn" onClick={openAdd}>
+              + Add Staff
+            </button>
+          </div>
         </div>
 
         {loading ? (
           <div className="oc-loading">Loading staff…</div>
+        ) : staff.length === 0 ? (
+          <div className="oc-empty">No staff added yet. Use “Add Staff” to start the chart.</div>
         ) : (
-          <>
-            {districtSupervisors.length > 0 && (
-              <div className="oc-section">
-                <div className="oc-section-hdr">District Supervision</div>
-                {districtSupervisors.map((p) => (
-                  <StaffCard key={p.id} person={p} onEdit={openEdit} onDelete={handleDelete} />
-                ))}
-              </div>
-            )}
-
-            {/* ADMIN */}
-            <div className="oc-section">
-              <div className="oc-section-hdr">School Administration</div>
-              {adminStaff.length === 0 ? (
-                <div className="oc-empty">No admin staff added yet.</div>
-              ) : (
-                adminStaff.map((p) => (
-                  <StaffCard
-                    key={p.id}
-                    person={p}
-                    onEdit={openEdit}
-                    onDelete={handleDelete}
-                  />
-                ))
-              )}
-            </div>
-
-            {alsCoordinators.length > 0 && (
-              <div className="oc-section">
-                <div className="oc-section-hdr">ALS Coordination</div>
-                {alsCoordinators.map((p) => (
-                  <StaffCard key={p.id} person={p} onEdit={openEdit} onDelete={handleDelete} />
-                ))}
-              </div>
-            )}
-
-            {/* TEACHING by grade */}
-            <div className="oc-section">
-              <div className="oc-section-hdr">Teaching Advisers</div>
-              {GRADE_LEVELS.map((gl) => {
-                if (gl === "ALS" || gl === "ALIVE") return null;
-                const gradeTeachers = teachingAdvisers.filter(
-                  (t) =>
-                    t.grade_level === gl ||
-                    (gl === "SNED" && t.grade_level === "SPED"),
-                );
-                if (gradeTeachers.length === 0) return null;
-
-                const sortedGradeTeachers = [...gradeTeachers].sort((a, b) => {
-                  if (a.is_grade_chairman === b.is_grade_chairman) return 0;
-                  return a.is_grade_chairman ? -1 : 1;
-                });
-
-                const chairman = sortedGradeTeachers.find(
-                  (t) => t.is_grade_chairman,
-                );
-
-                return (
-                  <div key={gl} className="oc-grade-group">
-                    <div className="oc-grade-label">
-                      {gl}
-                      {chairman && (
-                        <span className="oc-chairman-inline">
-                          ⭐ {getDisplayName(chairman)} (Grade Chairman)
-                        </span>
-                      )}
-                    </div>
-                    {sortedGradeTeachers.map((p) => (
-                      <StaffCard
-                        key={p.id}
-                        person={p}
-                        onEdit={openEdit}
-                        onDelete={handleDelete}
-                      />
+          <div
+            className={`oc-chart-scroll${panning ? " panning" : ""}`}
+            ref={scrollRef}
+            onPointerDown={startPan}
+            onPointerMove={movePan}
+            onPointerUp={endPan}
+            onPointerCancel={endPan}
+          >
+            <div className="oc-chart" ref={chartRef} style={{ zoom }}>
+              {districtSupervisors.length > 0 && (
+                <>
+                  <div className="oc-level">
+                    {districtSupervisors.map((p) => (
+                      <StaffNode key={p.id} person={p} variant="lead" onEdit={openEdit} onDelete={handleDelete} />
                     ))}
                   </div>
-                );
-              })}
-              {teachingStaff.length === 0 && (
-                <div className="oc-empty">No teaching staff added yet.</div>
+                  {(schoolHead || chartGroups.length > 0) && <div className="oc-link" />}
+                </>
+              )}
+
+              {schoolHead && (
+                <div className="oc-level">
+                  <StaffNode person={schoolHead} variant="lead" onEdit={openEdit} onDelete={handleDelete} />
+                </div>
+              )}
+
+              {assistantHeads.length > 0 && (
+                <>
+                  <div className="oc-link" />
+                  <div className="oc-branches">
+                    {assistantHeads.map((p) => (
+                      <div className="oc-branch" key={p.id}>
+                        <StaffNode person={p} variant="lead" onEdit={openEdit} onDelete={handleDelete} />
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {otherAdmin.length > 0 && (
+                <>
+                  <div className="oc-link" />
+                  <div className="oc-branches">
+                    {otherAdmin.map((p) => (
+                      <div className="oc-branch" key={p.id}>
+                        <StaffNode person={p} variant="node" onEdit={openEdit} onDelete={handleDelete} />
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {chartGroups.length > 0 && (
+                <>
+                  {adminStaff.length > 0 && <div className="oc-link" />}
+                  <div className="oc-branches oc-groups">
+                    {chartGroups.map((group) => (
+                      <div className="oc-branch" key={group.label}>
+                        <div className="oc-group-head">
+                          <strong>{group.label}</strong>
+                          <span>{group.people.length}</span>
+                        </div>
+                        <div className="oc-group-list">
+                          {group.people.map((p) => (
+                            <StaffNode
+                              key={p.id}
+                              person={p}
+                              detail={group.detail?.(p)}
+                              onEdit={openEdit}
+                              onDelete={handleDelete}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
-
-            {subjectTeachers.length > 0 && (
-              <div className="oc-section">
-                <div className="oc-section-hdr">Subject Teachers</div>
-                {subjectTeachers.map((p) => (
-                  <StaffCard key={p.id} person={p} onEdit={openEdit} onDelete={handleDelete} />
-                ))}
-              </div>
-            )}
-
-            {alsTeachers.length > 0 && (
-              <div className="oc-section">
-                <div className="oc-section-hdr">Alternative Learning System (ALS)</div>
-                {alsTeachers.map((p) => (
-                  <StaffCard key={p.id} person={p} onEdit={openEdit} onDelete={handleDelete} />
-                ))}
-              </div>
-            )}
-
-            {aliveTeachers.length > 0 && (
-              <div className="oc-section">
-                <div className="oc-section-hdr">ALIVE</div>
-                {aliveTeachers.map((p) => (
-                  <StaffCard key={p.id} person={p} onEdit={openEdit} onDelete={handleDelete} />
-                ))}
-              </div>
-            )}
-
-            {substitutes.length > 0 && (
-              <div className="oc-section">
-                <div className="oc-section-hdr">Substitute Teachers</div>
-                {substitutes.map((p) => (
-                  <StaffCard key={p.id} person={p} onEdit={openEdit} onDelete={handleDelete} />
-                ))}
-              </div>
-            )}
-
-            <div className="oc-section">
-              <div className="oc-section-hdr">Support Staff</div>
-              {otherSupport.length === 0 ? (
-                <div className="oc-empty">No support staff added yet.</div>
-              ) : (
-                otherSupport.map((p) => (
-                  <StaffCard key={p.id} person={p} onEdit={openEdit} onDelete={handleDelete} />
-                ))
-              )}
-            </div>
-
-            {watchmenAndUtility.length > 0 && (
-              <div className="oc-section">
-                <div className="oc-section-hdr">Watchmen &amp; Utility Workers</div>
-                {watchmenAndUtility.map((p) => (
-                  <StaffCard key={p.id} person={p} onEdit={openEdit} onDelete={handleDelete} />
-                ))}
-              </div>
-            )}
-          </>
+          </div>
         )}
       </div>
 
       {/* ── Add/Edit Modal ─────────────────────────────────────────────────── */}
       {showModal && (
-        <div
-          className="modal-overlay"
-          onClick={() => !saving && setShowModal(false)}
-        >
-          <div
-            className="modal-box oc-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
+        // Clicking outside does not close the form, so typed details are not lost by a stray click
+        <div className="modal-overlay">
+          <div className="modal-box oc-modal">
             <div className="modal-hdr">
               <span>{editId ? "✏️ Edit Staff" : "➕ Add Staff"}</span>
               <button onClick={() => !saving && setShowModal(false)}>✕</button>
@@ -880,9 +992,9 @@ export default function OrgChartPage({
                         setForm((prev) => ({
                           ...prev,
                           teaching_type: type,
-                          grade_level: type === "ALS" || type === "ALIVE" ? type : prev.grade_level,
+                          grade_level: FIXED_ASSIGNMENT_TYPES.includes(type) ? type : prev.grade_level,
                           is_grade_chairman:
-                            type === "ALS" || type === "ALIVE" || type === "Subject Teacher"
+                            FIXED_ASSIGNMENT_TYPES.includes(type) || type === "Subject Teacher"
                               ? false
                               : prev.is_grade_chairman,
                         }));
@@ -901,7 +1013,7 @@ export default function OrgChartPage({
                     <select
                       value={f.grade_level}
                       onChange={(e) => set("grade_level", e.target.value)}
-                      disabled={f.teaching_type === "ALS" || f.teaching_type === "ALIVE"}
+                      disabled={FIXED_ASSIGNMENT_TYPES.includes(f.teaching_type)}
                     >
                       {GRADE_LEVELS.map((g) => (
                         <option key={g} value={g}>

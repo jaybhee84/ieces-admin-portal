@@ -106,8 +106,9 @@
 @media (max-width: 480px) { .kinder-session-grid { grid-template-columns: 1fr; } }
 @media print {
   @page { size: landscape; margin: 10mm; }
-  body * { visibility: hidden !important; }
-  .roster-overlay, .roster-overlay * { visibility: visible !important; }
+  /* Only while the roster is open, so other pages' printouts are not blanked */
+  body:has(.roster-overlay) * { visibility: hidden !important; }
+  body:has(.roster-overlay) .roster-overlay, body:has(.roster-overlay) .roster-overlay * { visibility: visible !important; }
   .roster-overlay { position: absolute; inset: 0; display: block; padding: 0; background: white; }
   .roster-modal { width: 100%; max-height: none; overflow: visible; border-radius: 0; box-shadow: none; background: white; }
   .roster-modal > header { padding: 10px 12px; print-color-adjust: exact; -webkit-print-color-adjust: exact; }

@@ -8,6 +8,13 @@ contextBridge.exposeInMainWorld('ipc', {
     delete: (key) => ipcRenderer.invoke('mooe:delete', key),
   },
   getVersion: () => ipcRenderer.invoke('app:getVersion'),
+  // Print preview / printing
+  print: {
+    getPrinters: () => ipcRenderer.invoke('print:get-printers'),
+    renderPreview: (settings) => ipcRenderer.invoke('print:render-preview', settings),
+    execute: (settings) => ipcRenderer.invoke('print:execute', settings),
+    cleanupPreview: () => ipcRenderer.invoke('print:cleanup-preview'),
+  },
   updater: {
     checkForUpdates: () => ipcRenderer.invoke('update:check'),
     quitAndInstall: () => ipcRenderer.invoke('update:quitAndInstall'),

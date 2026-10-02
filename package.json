@@ -1,6 +1,6 @@
 {
   "name": "ieces-admin-portal",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "IECES Admin Portal",
   "author": "BuzzJay",
   "repository": {
@@ -35,6 +35,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
     "electron-updater": "^6.8.9",
+    "pdfjs-dist": "^6.3.289",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4"

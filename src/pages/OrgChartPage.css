@@ -10,9 +10,7 @@
 .oc-body {
   flex: 1;
   overflow-y: auto;
-  padding: 28px 32px;
-  max-width: 1000px;
-  margin: 0 auto;
+  padding: 24px 28px;
   width: 100%;
 }
 
@@ -21,8 +19,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 28px;
-  padding-bottom: 20px;
+  margin-bottom: 22px;
+  padding-bottom: 16px;
   border-bottom: 1.5px solid #e8ddd8;
 }
 
@@ -62,22 +60,40 @@
   padding: 40px;
 }
 
-/* ─── Sections ─── */
-.oc-section {
-  margin-bottom: 32px;
+/* ─── Zoom control ─── */
+.oc-hdr-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.oc-section-hdr {
-  font-size: 0.72rem;
-  font-weight: 800;
-  color: #7b1c1c;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 14px;
-  padding: 6px 0;
-  border-bottom: 2px solid #f5e8e8;
+.oc-zoom {
+  display: inline-flex;
+  border: 1px solid #dccfca;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
 }
 
+.oc-zoom button {
+  min-width: 32px;
+  height: 34px;
+  padding: 0 9px;
+  border: 0;
+  color: #5d4545;
+  background: white;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.oc-zoom button + button { border-left: 1px solid #dccfca; }
+.oc-zoom button:hover:not(:disabled) { color: #7b1c1c; background: #fff5f5; }
+.oc-zoom button:disabled { opacity: 0.4; cursor: default; }
+.oc-zoom .oc-zoom-value { min-width: 54px; font-variant-numeric: tabular-nums; }
+.oc-zoom .oc-zoom-fit { font-size: 0.74rem; }
+
+/* ─── Chart ─── */
 .oc-empty {
   font-size: 0.8rem;
   color: #7a6060;
@@ -88,187 +104,360 @@
   border: 1.5px dashed #e8ddd8;
 }
 
-/* ─── Grade Groups ─── */
-.oc-grade-group {
-  margin-bottom: 20px;
+/* Wide charts scroll sideways instead of squeezing the columns; dragging the chart pans it */
+.oc-chart-scroll {
+  overflow-x: auto;
+  padding-bottom: 24px;
+  cursor: grab;
+  user-select: none;
 }
 
-.oc-grade-label {
-  font-size: 0.8rem;
-  font-weight: 800;
-  color: #5a1010;
-  background: #fff5f5;
-  border-left: 3px solid #7b1c1c;
-  padding: 6px 12px;
-  border-radius: 0 6px 6px 0;
-  margin-bottom: 8px;
+.oc-chart-scroll.panning {
+  cursor: grabbing;
+}
+
+.oc-chart-scroll.panning .oc-node {
+  pointer-events: none;
+}
+
+.oc-chart {
+  --oc-line: #d3bdb6;
+  min-width: max-content;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
 }
 
-.oc-chairman-inline {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: #92400e;
-  background: #fef3c7;
-  padding: 2px 10px;
-  border-radius: 12px;
-}
-
-/* ─── Staff Card ─── */
-.oc-staff-card {
+.oc-level {
   display: flex;
-  align-items: center;
-  gap: 14px;
-  background: white;
-  border-radius: 10px;
-  padding: 12px 16px;
-  margin-bottom: 8px;
-  border-left: 4px solid #7b1c1c;
-  box-shadow: 0 1px 8px rgba(123, 26, 26, 0.07);
-  transition: box-shadow 0.15s;
+  justify-content: center;
+  gap: 16px;
 }
 
-.oc-staff-card:hover {
-  box-shadow: 0 4px 16px rgba(123, 26, 26, 0.13);
+/* Vertical connector between two levels */
+.oc-link {
+  width: 2px;
+  height: 28px;
+  background: var(--oc-line);
 }
 
-.oc-staff-card.oc-expired {
-  opacity: 0.6;
-  border-left-color: #9ca3af;
-  background: #f9fafb;
+/* Before a row of branches the stem below the line makes up the other half */
+.oc-link:has(+ .oc-branches) {
+  height: 14px;
 }
 
-.oc-photo-wrap {
+/* A row of siblings joined by a horizontal line, each hanging from it by a short stem */
+.oc-branches {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.oc-branch {
   position: relative;
+  padding: 14px 6px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.oc-branch::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  border-top: 2px solid var(--oc-line);
+}
+
+.oc-branch:first-child::before { left: 50%; }
+.oc-branch:last-child::before { right: 50%; }
+.oc-branch:only-child::before { display: none; }
+
+.oc-branch::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 14px;
+  margin-left: -1px;
+  background: var(--oc-line);
+}
+
+/* ─── Group columns ─── */
+.oc-groups .oc-branch {
+  width: 172px;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+.oc-group-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: white;
+  background: #7b1c1c;
+  font-size: 0.74rem;
+}
+
+.oc-group-head strong {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.oc-group-head span {
+  padding: 0 7px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 0.66rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Members hang from a spine under the group header */
+.oc-group-list {
+  width: 100%;
+  margin-top: 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--oc-line);
+  display: grid;
+  gap: 6px;
+}
+
+/* ─── Person ─── */
+.oc-node {
+  position: relative;
+  background: white;
+  border: 1px solid #e3d8d3;
+  border-radius: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.oc-node:hover,
+.oc-node:focus-within {
+  border-color: #c9a39b;
+  box-shadow: 0 2px 8px rgba(60, 20, 20, 0.06);
+}
+
+.oc-node-photo {
   flex-shrink: 0;
 }
 
-.oc-photo-wrap img {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid #f5c5c5;
-}
-
-.oc-no-photo {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: #f5e8e8;
+.oc-node-photo img,
+.oc-initials {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
-  color: #c09090;
-}
-
-/* Stars for Principal / Asst Principal / Head Teacher */
-.oc-pos-admin {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.oc-stars {
-  font-size: 0.75rem;
-  color: #f59e0b;
-  letter-spacing: 1px;
-  line-height: 1;
-}
-
-.oc-expired-badge {
-  position: absolute;
-  bottom: -4px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #6b7280;
-  color: white;
-  font-size: 0.55rem;
+  border-radius: 50%;
+  border: 1px solid #e3d8d3;
+  object-fit: cover;
+  object-position: center top;
+  color: #7b1c1c;
+  background: #f6ecea;
   font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 10px;
-  white-space: nowrap;
+  letter-spacing: 0.02em;
 }
 
-.oc-chairman-badge {
-  position: absolute;
-  bottom: -4px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #f59e0b;
-  color: white;
-  font-size: 0.55rem;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 10px;
-  white-space: nowrap;
-}
-
-.oc-info {
-  flex: 1;
+.oc-node-info {
   min-width: 0;
 }
 
-.oc-name {
-  font-size: 0.92rem;
-  font-weight: 800;
-  color: #1a0a0a;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.oc-node-name {
+  color: #1f1212;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
-.oc-pos {
-  font-size: 0.75rem;
-  color: #7a6060;
+.oc-node-pos {
   margin-top: 2px;
+  color: #7a6565;
+  line-height: 1.3;
 }
 
-.oc-sub-tag {
+.oc-stars {
+  margin-right: 5px;
+  color: #d99a1c;
   font-size: 0.68rem;
+  letter-spacing: 1px;
+}
+
+.oc-node-tag {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
   color: #92400e;
   background: #fef3c7;
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 8px;
-  margin-top: 4px;
+  font-size: 0.6rem;
+  font-weight: 700;
 }
 
-.oc-actions {
+/* Heads of the chart: every card the same size, photo on top and the name below */
+.oc-node-lead {
   display: flex;
-  gap: 8px;
-  flex-shrink: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 300px;
+  height: 156px;
+  padding: 14px 16px;
+  border-top: 3px solid #7b1c1c;
+  text-align: center;
 }
 
-.oc-btn-edit,
-.oc-btn-del {
-  background: none;
-  border: 1.5px solid #e8ddd8;
-  border-radius: 8px;
-  width: 34px;
-  height: 34px;
-  font-size: 1rem;
-  cursor: pointer;
+.oc-node-lead:hover,
+.oc-node-lead:focus-within {
+  border-top-color: #7b1c1c;
+}
+
+.oc-node-lead .oc-node-photo img,
+.oc-node-lead .oc-initials {
+  width: 64px;
+  height: 64px;
+  font-size: 1.15rem;
+}
+
+.oc-node-lead .oc-node-info { width: 100%; }
+.oc-node-lead .oc-node-name,
+.oc-node-lead .oc-node-pos {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.oc-node-lead .oc-node-name { font-size: 0.88rem; }
+.oc-node-lead .oc-node-pos { font-size: 0.72rem; }
+
+/* Administration row: equal cards, photo on top */
+.oc-node-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 164px;
+  height: 132px;
+  padding: 12px 10px;
+  text-align: center;
+}
+
+.oc-node-node .oc-node-photo img,
+.oc-node-node .oc-initials {
+  width: 44px;
+  height: 44px;
+  font-size: 0.85rem;
+}
+
+.oc-node-node .oc-node-info { width: 100%; }
+.oc-node-node .oc-node-name,
+.oc-node-node .oc-node-pos {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.oc-node-node .oc-node-name { font-size: 0.76rem; }
+.oc-node-node .oc-node-pos { font-size: 0.67rem; }
+
+/* Group members: compact row, joined to the spine by a short tick */
+.oc-node-leaf {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 6px 8px;
+}
+
+.oc-node-leaf::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -11px;
+  width: 10px;
+  border-top: 2px solid var(--oc-line);
+}
+
+.oc-node-leaf .oc-node-photo img,
+.oc-node-leaf .oc-initials {
+  width: 30px;
+  height: 30px;
+  font-size: 0.62rem;
+}
+
+.oc-node-leaf .oc-node-name { font-size: 0.7rem; overflow-wrap: anywhere; }
+.oc-node-leaf .oc-node-pos { font-size: 0.63rem; }
+
+.oc-node.oc-chairman {
+  border-color: #ecc878;
+  background: #fffcf2;
+}
+
+.oc-node.oc-expired {
+  opacity: 0.6;
+  background: #f9fafb;
+}
+
+/* Edit / remove: shown on hover or keyboard focus */
+.oc-node-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.oc-node:hover .oc-node-actions,
+.oc-node:focus-within .oc-node-actions {
+  opacity: 1;
+}
+
+.oc-node-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 2px;
+  border-radius: 7px;
+  background: white;
+}
+
+/* On rows the buttons sit at the right edge, fading over the end of the text only while hovered */
+.oc-node-leaf .oc-node-actions {
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  box-shadow: -10px 0 10px white;
+}
+
+.oc-node.oc-chairman .oc-node-actions {
+  background: #fffcf2;
+  box-shadow: -10px 0 10px #fffcf2;
+}
+
+.oc-node-actions button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, border-color 0.15s;
+  border: 1px solid #e3d8d3;
+  border-radius: 6px;
+  color: #6b5555;
+  background: white;
+  cursor: pointer;
 }
 
-.oc-btn-edit:hover {
-  background: #fff5f5;
-  border-color: #7b1c1c;
+.oc-node-actions svg {
+  width: 14px;
+  height: 14px;
 }
 
-.oc-btn-del:hover {
-  background: #fee2e2;
-  border-color: #dc2626;
-}
+.oc-node-actions button:hover { color: #7b1c1c; border-color: #c9a39b; background: #fff8f7; }
+.oc-node-actions button.danger:hover { color: #b42318; border-color: #f3b4ae; background: #fff1f0; }
 
 /* ─── Modal ─── */
 .oc-modal {

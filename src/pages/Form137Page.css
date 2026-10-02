@@ -355,8 +355,9 @@ strong.f137p-status-pill {
 
 @media print {
   @page { size: legal portrait; margin: 0; }
-  body * { visibility: hidden !important; }
-  .f137p-print-target, .f137p-print-target * { visibility: visible !important; }
+  /* Only while a Form 137 is open for printing, so other pages' printouts are not blanked */
+  body:has(.f137p-print-target) * { visibility: hidden !important; }
+  body:has(.f137p-print-target) .f137p-print-target, body:has(.f137p-print-target) .f137p-print-target * { visibility: visible !important; }
   .f137p-print-target { position: absolute; inset: 0; background: #fff; }
   .f137-pages { width: 8.5in; margin: 0; }
   .f137-zoom-stage { width: 8.5in !important; margin: 0; zoom: 1 !important; }

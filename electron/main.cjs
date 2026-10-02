@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, Menu, dialog, shell } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const path = require('path')
 const fs = require('fs')
+const printing = require('./print.cjs')
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
@@ -212,6 +213,10 @@ ipcMain.handle('mooe:delete', (_, { sy, month }) => {
 })
 
 ipcMain.handle('app:getVersion', () => app.getVersion())
+
+// Print preview / printing (shared with SwiSS and Tax-E)
+printing.register(() => win)
+app.on('will-quit', printing.cleanupPrintPreviewDir)
 
 // Updater IPC
 ipcMain.handle('update:check', () => autoUpdater.checkForUpdates())

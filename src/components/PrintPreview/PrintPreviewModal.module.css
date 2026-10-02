@@ -1,0 +1,356 @@
+/* The dialog comes from SwiSS, which names its theme colors differently.
+   They are set here, in this app's palette, so the dialog is self-contained. */
+.overlay {
+  --surface-0: #f3ece9;
+  --surface-1: #faf7f5;
+  --surface-2: #ffffff;
+  --text-primary: #1f1212;
+  --text-secondary: #7a6565;
+  --border: #e5d9d5;
+  --border-strong: #cfc0ba;
+  --btn-navy: #7b1c1c;
+  --btn-navy-dark: #5a1010;
+  --sdo-blue: #7b1c1c;
+  --danger: #b42318;
+  --danger-bg: #fee4e2;
+  --danger-border: #f3b4ae;
+  --radius: 8px;
+  --radius-lg: 12px;
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(9, 14, 27, 0.58);
+}
+
+.dialog {
+  width: min(1180px, 100%);
+  height: min(860px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.closeIconBtn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1;
+  padding: 6px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.closeIconBtn:hover { background: var(--surface-0); color: var(--text-primary); }
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+}
+
+@media (max-width: 760px) {
+  .body { grid-template-columns: 1fr; }
+}
+
+/* ---------- Left panel: settings ---------- */
+
+.settingsPanel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.settingsScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 16px;
+  border: none;
+  padding: 0;
+  min-width: 0;
+}
+
+.field legend {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 0;
+  margin-bottom: 4px;
+}
+
+.field label:not(.radioRow):not(.marginField) {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.field select,
+.field input[type="text"],
+.field input[type="number"] {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: 13px;
+  color-scheme: light dark;
+}
+
+.field select:focus-visible,
+.field input:focus-visible {
+  outline: none;
+  border-color: var(--btn-navy);
+  box-shadow: 0 0 0 3px rgba(123, 28, 28, 0.15);
+}
+
+.radioRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 26px;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 400;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+/* Global text-input styles set width: 100% and height: 34px. Radios must
+   retain their own size so their labels stay beside them on one line. */
+.radioRow input[type="radio"] {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--btn-navy);
+  color-scheme: light;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .radioRow input[type="radio"] {
+  color-scheme: dark;
+}
+
+.radioRow input[type="radio"]:focus-visible {
+  outline: 2px solid var(--sdo-blue);
+  outline-offset: 3px;
+}
+
+.rangeInput {
+  margin-top: 6px;
+}
+
+.marginGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.marginField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.scaleInput { margin-top: 6px; width: 100px; }
+
+.hintText {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.errorText {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: var(--danger);
+}
+
+.actions {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.cancelBtn {
+  min-width: 84px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cancelBtn:hover:not(:disabled) { background: var(--surface-0); }
+.cancelBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.printBtn {
+  min-width: 110px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--btn-navy);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s;
+}
+.printBtn:hover:not(:disabled) { background: var(--btn-navy-dark); }
+.printBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---------- Right panel: live preview ---------- */
+
+.previewPanel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-1);
+}
+
+.previewToolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.pageNav, .zoomControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.navBtn {
+  padding: 5px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.navBtn:hover:not(:disabled) { background: var(--surface-0); }
+.navBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.pageIndicator, .zoomIndicator {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 84px;
+  text-align: center;
+}
+
+.paperStage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  /* "safe" falls back to start alignment once the zoomed page is wider than the stage, so the
+     horizontal scrollbar reaches both edges instead of cutting off the page's left side. */
+  justify-content: safe center;
+  padding: 32px;
+  /* Neutral backdrop so the white "paper" reads clearly, like a desktop
+     print-preview surface rather than blending into the app chrome. */
+  background: repeating-linear-gradient(135deg, var(--surface-0) 0px, var(--surface-0) 100%);
+}
+
+:root[data-theme="dark"] .paperStage {
+  background: #14161d;
+}
+
+.pageCanvas {
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  max-width: none;
+}
+
+.previewLoadingBox, .previewErrorBox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.previewErrorBox {
+  color: var(--danger);
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  max-width: 420px;
+  text-align: center;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--btn-navy);
+  animation: pp-spin 0.8s linear infinite;
+  flex: 0 0 auto;
+}
+
+@keyframes pp-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* The dialog itself never appears on the printout or in the preview */
+@media print {
+  .overlay { display: none !important; }
+}
