@@ -123,10 +123,39 @@
 .tl-chip small { color: #8a7575; font-size: .66rem; font-weight: 600; }
 .tl-chip button { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px; color: #8a7575; background: none; font-size: .9rem; line-height: 1; }
 .tl-chip button:hover { color: #b42318; background: #fee4e2; }
+/* ASSIGNMENTS: teachers listed by grade level */
+.tl-tasks td { vertical-align: top; }
+.tl-tasks td:first-child, .tl-tasks td > .tl-muted { line-height: 30px; }
+.tl-task-group { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 0 12px; padding: 6px 0; border-top: 1px solid #f1e9e6; }
+.tl-task-group:first-child { padding-top: 0; border-top: 0; }
+.tl-task-group:last-child { padding-bottom: 0; }
+.tl-task-grade { display: flex; align-items: baseline; gap: 6px; padding-top: 4px; color: #351414; font-size: .74rem; font-weight: 700; }
+.tl-task-grade small { color: #8a7575; font-size: .66rem; font-weight: 600; }
+.tl-task-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 0 16px; margin: 0; padding: 0; list-style: none; }
+.tl-task-list li { display: flex; align-items: center; gap: 8px; min-width: 0; height: 26px; padding: 0 2px 0 6px; border-radius: 4px; font-size: .74rem; }
+.tl-task-list li:hover { background: #faf7f5; }
+.tl-task-name { flex: 1; min-width: 0; overflow: hidden; color: #351414; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.tl-task-list li small { flex: none; color: #8a7575; font-size: .66rem; white-space: nowrap; }
+.tl-task-list li button { flex: none; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px; color: #8a7575; background: none; font-size: .9rem; line-height: 1; }
+.tl-task-list li button:hover { color: #b42318; background: #fee4e2; }
+.tl-grade-pick { display: inline-flex; flex: none; }
+.tl-task-list li .tl-grade-pick button { width: 26px; height: 18px; margin-left: -1px; border: 1px solid #dfd2cd; border-radius: 0; color: #8a7575; background: white; font-size: .64rem; font-weight: 700; }
+.tl-task-list li .tl-grade-pick button:first-child { margin-left: 0; border-radius: 4px 0 0 4px; }
+.tl-task-list li .tl-grade-pick button:last-child { border-radius: 0 4px 4px 0; }
+.tl-task-list li .tl-grade-pick button:hover { color: #7b1a1a; background: #fff8f8; }
+.tl-task-list li .tl-grade-pick button.on { position: relative; border-color: #7b1a1a; color: white; background: #7b1a1a; }
 .tl-minutes { width: 64px; height: 30px; padding: 0 6px; border: 1px solid #dccfca; border-radius: 8px; color: #331515; background: white; font-size: .76rem; text-align: right; }
 .tl-minutes.set { border-color: #7b1a1a; font-weight: 700; }
 .tl-minutes::placeholder { color: #b3a3a3; }
 .tl-minutes-table td { vertical-align: middle; }
+/* SUBJECTS */
+.tl-subject-add { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; padding: 0 18px 14px; }
+.tl-subject-add > input { width: 260px; height: 32px; padding: 0 10px; border: 1px solid #dccfca; border-radius: 8px; color: #331515; background: white; font-size: .78rem; outline: none; }
+.tl-subject-add > input:focus { border-color: #7b1a1a; }
+.tl-subject-grades { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.tl-subject-grades label { display: inline-flex; align-items: center; gap: 5px; color: #5d4545; font-size: .74rem; font-weight: 600; white-space: nowrap; }
+.tl-subjects input[type="checkbox"], .tl-subject-grades input { accent-color: #7b1a1a; }
+.tl-offered { color: #166534; font-weight: 800; }
 .tl-muted {color: #b3a3a3; font-size: .74rem; }
 
 @media (max-width: 1260px) {

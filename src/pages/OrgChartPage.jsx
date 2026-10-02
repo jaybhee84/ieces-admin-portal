@@ -28,6 +28,8 @@ const ADMIN_POSITIONS = [
   "Head Teacher VI",
   "ALS Coordinator",
   "Nurse II",
+  "School Counselor Associate I (SCA I)",
+  "School Counselor Associate II (SCA II)",
   "Administrative Officer II (AO II)",
   "Planning & Development Officer I (PDO I)",
   "Administrative Assistant III (Senior Bookkeeper)",
@@ -43,6 +45,7 @@ const ADMIN_RANK_ORDER = [
   "ALS Coordinator",
   "Head Teacher",
   "Nurse",
+  "School Counselor Associate",
   "Administrative Officer",
   "Planning & Development Officer",
   "Administrative Assistant III",
@@ -113,6 +116,11 @@ const TEACHING_TYPES = ["Adviser", "Subject Teacher", "ALS", "ALIVE", "SNED"];
 // Teacher types that are their own assignment: the grade level follows the type
 const FIXED_ASSIGNMENT_TYPES = ["ALS", "ALIVE", "SNED"];
 
+// Programs an administrator can head; the head sits beside the assistant principals on the chart
+const HEADED_PROGRAMS = ["ALS", "ALIVE", "SNED"];
+const headedProgram = (person) =>
+  person.category === "admin" && HEADED_PROGRAMS.includes(person.grade_level) ? person.grade_level : "";
+
 const JO_POSITIONS = [
   "Security Guard / Watchman",
   "Utility Worker",
@@ -121,6 +129,8 @@ const JO_POSITIONS = [
 
 const SUPPORT_POSITIONS = [
   "Nurse II",
+  "School Counselor Associate I (SCA I)",
+  "School Counselor Associate II (SCA II)",
   "Administrative Officer II (AO II)",
   "Planning & Development Officer I (PDO I)",
   "Administrative Assistant III (Senior Bookkeeper)",
@@ -269,7 +279,8 @@ const EMPTY = {
   teaching_type: "Adviser",
   grade_level: "Grade 1",
   is_grade_chairman: false,
-  status: "alive", // alive | substitute
+  heads_program: "", // admin only: ALS | ALIVE | SNED
+  status: "alive", // alive | contractual | substitute
   sub_expiry_start: "",
   sub_expiry_end: "",
   photo_url: "",
@@ -290,7 +301,7 @@ function StaffNode({ person, variant = "leaf", detail, onEdit, onDelete }) {
         : person.admin_position
       : person.category === "teaching"
         ? person.teaching_position || ""
-        : person.admin_position || "Job Order");
+        : person.admin_position || (person.category === "job-order" ? "Job Order" : ""));
 
   return (
     <div
@@ -310,6 +321,7 @@ function StaffNode({ person, variant = "leaf", detail, onEdit, onDelete }) {
           {position}
         </div>
         {person.is_grade_chairman && <div className="oc-node-tag chairman">Grade Chairman</div>}
+        {person.status === "contractual" && <div className="oc-node-tag">Contractual</div>}
         {person.status === "substitute" && (
           <div className="oc-node-tag">
             {expired ? "Expired · " : ""}
@@ -486,6 +498,7 @@ export default function OrgChartPage({
           ? "SNED"
           : person.grade_level || "Grade 1",
       is_grade_chairman: person.is_grade_chairman || false,
+      heads_program: headedProgram(person),
       status: person.status || "alive",
       sub_expiry_start: person.sub_expiry_start || "",
       sub_expiry_end: person.sub_expiry_end || "",
@@ -515,11 +528,14 @@ export default function OrgChartPage({
       addToast("First Name is required.", "warning");
       return;
     }
-    if (form.category === "admin" && !form.admin_position) {
+    // Contractual staff hold no plantilla position
+    const contractual = form.status === "contractual" && form.category !== "job-order";
+    if (!contractual && form.category === "admin" && !form.admin_position) {
       addToast("Select an admin position.", "warning");
       return;
     }
     if (
+      !contractual &&
       (form.category === "job-order" || form.category === "non-teaching") &&
       !form.admin_position
     ) {
@@ -566,20 +582,25 @@ export default function OrgChartPage({
       first_name: first,
       middle_name: middle || null,
       category: form.category,
-      admin_position: form.category !== "teaching" ? form.admin_position : null,
+      admin_position: form.category !== "teaching" && !contractual ? form.admin_position : null,
       is_designated:
-        form.category === "admin" && DESIGNATABLE.includes(form.admin_position)
+        form.category === "admin" && !contractual && DESIGNATABLE.includes(form.admin_position)
           ? form.is_designated
           : false,
       teaching_position:
-        form.category === "teaching" ? form.teaching_position : null,
+        form.category === "teaching" && !contractual ? form.teaching_position : null,
       teaching_type: form.category === "teaching" ? form.teaching_type : null,
-      grade_level: form.category === "teaching" ? form.grade_level : null,
+      // For an administrator the grade level column holds the program they head
+      grade_level:
+        form.category === "teaching"
+          ? form.grade_level
+          : form.category === "admin" && form.heads_program
+            ? form.heads_program
+            : null,
       is_grade_chairman:
         form.category === "teaching" &&
         form.grade_level !== "SNED" &&
         form.teaching_type !== "ALS" &&
-        form.teaching_type !== "ALIVE" &&
         form.teaching_type !== "Subject Teacher"
           ? form.is_grade_chairman
           : false,
@@ -671,8 +692,19 @@ export default function OrgChartPage({
   const [schoolHead, ...belowHead] = adminStaff;
   // Assistant principals sit directly under the school head; the rest of the administration is under them
   const isAssistantHead = (p) => String(p.admin_position || "").startsWith("Assistant Principal");
-  const assistantHeads = belowHead.filter(isAssistantHead);
-  const otherAdmin = belowHead.filter((p) => !isAssistantHead(p));
+  // A program head (e.g. Head of ALS) stands on the same level, right above the column of the program they
+  // head. Without that column on the chart they join the row of assistant principals instead.
+  const programHeads = belowHead.filter((p) => !isAssistantHead(p) && headedProgram(p));
+  const hasProgramGroup = (program) =>
+    program === "ALS" ? alsCoordinators.length + alsTeachers.length > 0
+      : program === "ALIVE" ? aliveTeachers.length > 0
+        : teachingAdvisers.some((t) => ["SNED", "SPED"].includes(t.grade_level));
+  const groupLeads = (label) => programHeads.filter((p) => headedProgram(p) === label && hasProgramGroup(label));
+  const assistantHeads = [
+    ...belowHead.filter(isAssistantHead),
+    ...programHeads.filter((p) => !hasProgramGroup(headedProgram(p))),
+  ];
+  const otherAdmin = belowHead.filter((p) => !isAssistantHead(p) && !headedProgram(p));
   const chairmanFirst = (list) =>
     [...list].sort((a, b) => Number(Boolean(b.is_grade_chairman)) - Number(Boolean(a.is_grade_chairman)));
   const teachingDetail = (p) => [p.teaching_position, p.grade_level].filter(Boolean).join(" · ");
@@ -683,9 +715,9 @@ export default function OrgChartPage({
         teachingAdvisers.filter((t) => t.grade_level === gl || (gl === "SNED" && t.grade_level === "SPED")),
       ),
     })),
+    { label: "ALIVE", people: chairmanFirst(aliveTeachers) },
     { label: "Subject Teachers", people: subjectTeachers, detail: teachingDetail },
     { label: "ALS", people: [...alsCoordinators, ...alsTeachers.filter((t) => !alsCoordinators.includes(t))] },
-    { label: "ALIVE", people: aliveTeachers },
     {
       label: "Substitutes",
       people: substitutes,
@@ -695,7 +727,13 @@ export default function OrgChartPage({
     { label: "Watchmen & Utility", people: watchmenAndUtility },
   ].filter((group) => group.people.length > 0);
 
+  // How far a program head is lifted above their column to stand level with the assistant principals:
+  // the connector below the administration row, plus that row when there is one
+  const leadRise = 14 + (otherAdmin.length > 0 ? 160 : 0);
+
   const f = form;
+  // Contractual staff hold no plantilla position, so the position boxes are switched off
+  const noPosition = f.status === "contractual" && f.category !== "job-order";
   const set = (k, v) => setForm((prev) => ({ ...prev, [k]: v }));
 
   // ─── render ────────────────────────────────────────────────────────────────
@@ -794,6 +832,13 @@ export default function OrgChartPage({
                   <div className="oc-branches oc-groups">
                     {chartGroups.map((group) => (
                       <div className="oc-branch" key={group.label}>
+                        {groupLeads(group.label).length > 0 && (
+                          <div className="oc-group-lead" style={{ "--oc-rise": `${leadRise}px` }}>
+                            {groupLeads(group.label).map((p) => (
+                              <StaffNode key={p.id} person={p} variant="lead" onEdit={openEdit} onDelete={handleDelete} />
+                            ))}
+                          </div>
+                        )}
                         <div className="oc-group-head">
                           <strong>{group.label}</strong>
                           <span>{group.people.length}</span>
@@ -917,13 +962,14 @@ export default function OrgChartPage({
                 f.category === "non-teaching" ||
                 f.category === "job-order") && (
                 <div className="oc-field">
-                  <label>Position *</label>
+                  <label>{noPosition ? "Position" : "Position *"}</label>
                   {f.category === "admin" ? (
                     <select
-                      value={f.admin_position}
+                      value={noPosition ? "" : f.admin_position}
                       onChange={(e) => set("admin_position", e.target.value)}
+                      disabled={noPosition}
                     >
-                      <option value="">— Select position —</option>
+                      <option value="">{noPosition ? "— None (contractual) —" : "— Select position —"}</option>
                       {ADMIN_POSITIONS.map((p) => (
                         <option key={p} value={p}>
                           {p}
@@ -932,10 +978,11 @@ export default function OrgChartPage({
                     </select>
                   ) : (
                     <select
-                      value={f.admin_position}
+                      value={noPosition ? "" : f.admin_position}
                       onChange={(e) => set("admin_position", e.target.value)}
+                      disabled={noPosition}
                     >
-                      <option value="">— Select position —</option>
+                      <option value="">{noPosition ? "— None (contractual) —" : "— Select position —"}</option>
                       {(f.category === "non-teaching" ? SUPPORT_POSITIONS : JO_POSITIONS).map((p) => (
                         <option key={p} value={p}>
                           {p}
@@ -946,8 +993,27 @@ export default function OrgChartPage({
                 </div>
               )}
 
+              {/* Program headed */}
+              {f.category === "admin" && (
+                <div className="oc-field">
+                  <label>Heads Program</label>
+                  <select
+                    value={f.heads_program}
+                    onChange={(e) => set("heads_program", e.target.value)}
+                  >
+                    <option value="">— None —</option>
+                    {HEADED_PROGRAMS.map((program) => (
+                      <option key={program} value={program}>
+                        Head of {program}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Designated toggle */}
               {f.category === "admin" &&
+                !noPosition &&
                 DESIGNATABLE.includes(f.admin_position) && (
                   <div className="oc-field oc-checkbox-field">
                     <label className="oc-checkbox-label">
@@ -970,11 +1036,13 @@ export default function OrgChartPage({
               {f.category === "teaching" && (
                 <>
                   <div className="oc-field">
-                    <label>DepEd Position *</label>
+                    <label>{noPosition ? "DepEd Position" : "DepEd Position *"}</label>
                     <select
-                      value={f.teaching_position}
+                      value={noPosition ? "" : f.teaching_position}
                       onChange={(e) => set("teaching_position", e.target.value)}
+                      disabled={noPosition}
                     >
+                      {noPosition && <option value="">— None (contractual) —</option>}
                       {TEACHING_POSITIONS.map((p) => (
                         <option key={p} value={p}>
                           {p}
@@ -994,7 +1062,7 @@ export default function OrgChartPage({
                           teaching_type: type,
                           grade_level: FIXED_ASSIGNMENT_TYPES.includes(type) ? type : prev.grade_level,
                           is_grade_chairman:
-                            FIXED_ASSIGNMENT_TYPES.includes(type) || type === "Subject Teacher"
+                            (FIXED_ASSIGNMENT_TYPES.includes(type) && type !== "ALIVE") || type === "Subject Teacher"
                               ? false
                               : prev.is_grade_chairman,
                         }));
@@ -1025,7 +1093,6 @@ export default function OrgChartPage({
 
                   {f.grade_level !== "SNED" &&
                     f.teaching_type !== "ALS" &&
-                    f.teaching_type !== "ALIVE" &&
                     f.teaching_type !== "Subject Teacher" && (
                     <div className="oc-field oc-checkbox-field">
                       <label className="oc-checkbox-label">
@@ -1049,7 +1116,7 @@ export default function OrgChartPage({
 
               {/* Status */}
               {f.category !== "job-order" && (
-                <div className="oc-field">
+                <div className="oc-field oc-field-full">
                   <label>Status</label>
                   <div className="oc-radio-group">
                     <label
@@ -1063,6 +1130,18 @@ export default function OrgChartPage({
                         onChange={() => set("status", "alive")}
                       />
                       Regular / Active
+                    </label>
+                    <label
+                      className={`oc-radio ${f.status === "contractual" ? "active" : ""}`}
+                    >
+                      <input
+                        type="radio"
+                        name="status"
+                        value="contractual"
+                        checked={f.status === "contractual"}
+                        onChange={() => set("status", "contractual")}
+                      />
+                      Contractual
                     </label>
                     <label
                       className={`oc-radio ${f.status === "substitute" ? "active" : ""}`}

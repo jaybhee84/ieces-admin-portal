@@ -219,6 +219,29 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Head of a program: stands above their column, level with the assistant principals, joined by a line */
+.oc-group-lead {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  z-index: 1;
+  display: flex;
+  gap: 12px;
+  padding-bottom: var(--oc-rise);
+  transform: translateX(-50%);
+}
+
+.oc-group-lead::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  height: var(--oc-rise);
+  margin-left: -1px;
+  background: var(--oc-line);
+}
+
 /* Members hang from a spine under the group header */
 .oc-group-list {
   width: 100%;
@@ -461,7 +484,7 @@
 
 /* ─── Modal ─── */
 .oc-modal {
-  max-width: 520px !important;
+  max-width: 640px !important;
   max-height: 90vh;
   overflow: hidden;
   display: flex;
@@ -469,9 +492,26 @@
 }
 
 .oc-form-body {
-  padding: 24px;
+  padding: 20px 24px;
   overflow-y: auto;
   flex: 1;
+  /* Two fields per row; photo, checkboxes, status and actions take the full width */
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 14px;
+  align-content: start;
+}
+
+.oc-form-body > .oc-photo-section,
+.oc-form-body > .oc-checkbox-field,
+.oc-form-body > .oc-field-full,
+.oc-form-body > .oc-sub-dates,
+.oc-form-body > .oc-form-actions {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 560px) {
+  .oc-form-body { grid-template-columns: minmax(0, 1fr); }
 }
 
 .oc-photo-section {
@@ -531,7 +571,8 @@
 
 /* Form fields */
 .oc-field {
-  margin-bottom: 16px;
+  margin-bottom: 14px;
+  min-width: 0;
 }
 
 .oc-field label {
@@ -548,7 +589,8 @@
 .oc-field input[type="date"],
 .oc-field select {
   width: 100%;
-  padding: 10px 12px;
+  height: 38px;
+  padding: 0 12px;
   border: 1.5px solid #e8ddd8;
   border-radius: 8px;
   font-size: 0.88rem;
@@ -597,12 +639,17 @@
   gap: 10px;
 }
 
-.oc-radio {
+.oc-field .oc-radio {
   flex: 1;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
+  height: 38px;
+  margin-bottom: 0;
+  padding: 0 12px;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
   border: 1.5px solid #e8ddd8;
   border-radius: 8px;
   font-size: 0.82rem;
@@ -612,18 +659,25 @@
   color: #1a0a0a;
 }
 
-.oc-radio.active {
+.oc-field .oc-radio.active {
   border-color: #7b1c1c;
   background: #fff5f5;
   color: #7b1c1c;
 }
 
 .oc-radio input[type="radio"] {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin: 0;
   accent-color: #7b1c1c;
 }
 
 /* Substitute dates */
 .oc-sub-dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 14px;
   background: #fffbeb;
   border: 1.5px solid #fde68a;
   border-radius: 10px;
@@ -634,13 +688,15 @@
 /* Form actions */
 .oc-form-actions {
   display: flex;
+  justify-content: flex-end;
   gap: 10px;
-  padding-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid #f1e9e6;
 }
 
 .oc-btn-cancel {
-  flex: 1;
-  padding: 11px;
+  min-width: 110px;
+  padding: 10px 18px;
   border: 1.5px solid #e8ddd8;
   border-radius: 10px;
   background: white;
@@ -655,8 +711,8 @@
 }
 
 .oc-btn-save {
-  flex: 2;
-  padding: 11px;
+  min-width: 150px;
+  padding: 10px 18px;
   border: none;
   border-radius: 10px;
   background: #7b1c1c;
@@ -673,5 +729,10 @@
 
 .oc-btn-save:disabled {
   opacity: 0.6;
+  cursor: not-allowed;
+}
+.oc-field select:disabled {
+  color: #a89a9a;
+  background: #f6f1ef;
   cursor: not-allowed;
 }

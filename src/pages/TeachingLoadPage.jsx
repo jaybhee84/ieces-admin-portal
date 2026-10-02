@@ -27,14 +27,17 @@ const GRADE_LEVELS = ["Kinder", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Gra
 // Elementary subjects as named and offered per grade in DepEd InSightED "Subjects Taught" (eSF7),
 // so a period encoded here matches the subject picked there
 const SPECIAL_SUBJECTS = ["Special Program in Science", "Madrasah Subjects"];
+// ALIVE (Arabic Language and Islamic Values Education), offered from Grade 1 under the Madrasah
+// Education Program (DepEd Order 41, s. 2017)
+const ALIVE_SUBJECTS = ["Arabic Language", "Islamic Values Education"];
 const SUBJECTS_BY_GRADE = {
   Kinder: ["Kinder Blocks of Time"],
-  "Grade 1": ["Language", "Reading and Literacy", "Mathematics", "Makabansa", "GMRC", ...SPECIAL_SUBJECTS],
-  "Grade 2": ["Filipino", "English", "Mathematics", "Makabansa", "GMRC", ...SPECIAL_SUBJECTS],
-  "Grade 3": ["Filipino", "English", "Mathematics", "Science", "Makabansa", "GMRC", ...SPECIAL_SUBJECTS],
-  "Grade 4": ["Filipino", "English", "Mathematics", "Science", "Araling Panlipunan", "MAPEH", "EPP/TLE", "TLE", "GMRC", ...SPECIAL_SUBJECTS],
-  "Grade 5": ["Filipino", "English", "Mathematics", "Science", "Araling Panlipunan", "MAPEH", "EPP/TLE", "TLE", "GMRC", ...SPECIAL_SUBJECTS],
-  "Grade 6": ["Filipino", "English", "Mathematics", "Science", "Araling Panlipunan", "MAPEH", "EPP/TLE", "TLE", "GMRC", ...SPECIAL_SUBJECTS],
+  "Grade 1": ["Language", "Reading and Literacy", "Mathematics", "Makabansa", "GMRC", ...ALIVE_SUBJECTS, ...SPECIAL_SUBJECTS],
+  "Grade 2": ["Filipino", "English", "Mathematics", "Makabansa", "GMRC", ...ALIVE_SUBJECTS, ...SPECIAL_SUBJECTS],
+  "Grade 3": ["Filipino", "English", "Mathematics", "Science", "Makabansa", "GMRC", ...ALIVE_SUBJECTS, ...SPECIAL_SUBJECTS],
+  "Grade 4": ["Filipino", "English", "Mathematics", "Science", "Araling Panlipunan", "MAPEH", "EPP/TLE", "TLE", "GMRC", ...ALIVE_SUBJECTS, ...SPECIAL_SUBJECTS],
+  "Grade 5": ["Filipino", "English", "Mathematics", "Science", "Araling Panlipunan", "MAPEH", "EPP/TLE", "TLE", "GMRC", ...ALIVE_SUBJECTS, ...SPECIAL_SUBJECTS],
+  "Grade 6": ["Filipino", "English", "Mathematics", "Science", "Araling Panlipunan", "MAPEH", "EPP/TLE", "TLE", "GMRC", ...ALIVE_SUBJECTS, ...SPECIAL_SUBJECTS],
   SNED: ["SNED Modified Subject"],
   ALS: [
     "ALS Learning Strand",
@@ -97,6 +100,10 @@ const MAX_OVERLOAD_MINUTES = 120;
 const MAX_WORKDAY_MINUTES = 480;
 // Class advising counts as teaching load equivalent to one hour a day (DepEd Order 005, s. 2024)
 const CLASS_ADVISORY = "Class Advisory";
+// Teachers of the Special Science Class: its advanced subjects are extra teaching time, counted as teaching load
+const SSC_TASK = "Special Science Class (SSC)";
+// Assignments that count as teaching load instead of ancillary work
+const TEACHING_TASKS = [CLASS_ADVISORY, SSC_TASK];
 const DEFAULT_TASK_MINUTES = 60;
 // A teacher whose daily average is this far from the school average is flagged as unevenly loaded
 const BALANCE_TOLERANCE_MINUTES = 30;
@@ -117,25 +124,24 @@ const KINDER_BLOCK_MINUTES = 180;
 const READING_MATH_PROGRAM_MINUTES = 30; // NRP / NMP: 30 minutes, 4 times a week
 const FOUR_DAYS = ["M", "T", "W", "TH"];
 
-// Uniform period lengths a school may adopt instead of the standard allotment (Grades 4–6)
-const PERIOD_OPTIONS = [
-  { value: "standard", label: "Standard (40 min / 1 hr)" },
-  { value: "50", label: "Uniform 50 min" },
-  { value: "55", label: "Uniform 55 min" },
-  { value: "60", label: "Uniform 60 min" },
-];
+// Periods follow the standard allotment (40 min / 1 hr); other lengths are set in the Time allotment tab
+const PERIOD_OPTION = "standard";
 const UNIFORM_GRADES = ["Grade 4", "Grade 5", "Grade 6"];
 // Under a uniform schedule these meet 4 times a week; the other learning areas meet daily
 const FOUR_TIMES_A_WEEK = ["filipino", "araling panlipunan", "mapeh", "epp/tle", "tle"];
-const PERIOD_OPTION_STORAGE_KEY = "tl-period-option";
 const OTHER_SUBJECT = "__other__";
 
-function readPeriodOption() {
+// Subjects the school adds in the Subjects tab, with the grades that offer them; kept on this computer
+const CUSTOM_SUBJECTS_STORAGE_KEY = "tl-custom-subjects";
+
+function readCustomSubjects() {
   try {
-    const stored = localStorage.getItem(PERIOD_OPTION_STORAGE_KEY);
-    return PERIOD_OPTIONS.some((option) => option.value === stored) ? stored : "standard";
+    const stored = JSON.parse(localStorage.getItem(CUSTOM_SUBJECTS_STORAGE_KEY) || "[]");
+    return Array.isArray(stored)
+      ? stored.filter((item) => item && typeof item.name === "string" && Array.isArray(item.grades))
+      : [];
   } catch {
-    return "standard";
+    return [];
   }
 }
 
@@ -160,6 +166,9 @@ function standardAllotmentFor(gradeLevel, subject, periodOption) {
   if (name === "national reading program" || name === "national mathematics program") {
     return { minutes: READING_MATH_PROGRAM_MINUTES, days: FOUR_DAYS };
   }
+  // ALIVE: Arabic Language 3 times a week and Islamic Values Education twice, 40 minutes each
+  if (name === "arabic language") return { minutes: FORTY_MINUTES, days: ["M", "W", "F"] };
+  if (name === "islamic values education") return { minutes: FORTY_MINUTES, days: ["T", "TH"] };
   if (uniform) return { minutes: uniform, days: FOUR_TIMES_A_WEEK.includes(name) ? FOUR_DAYS : ALL_DAYS };
   return { minutes: FORTY_MINUTE_SUBJECTS.includes(name) ? FORTY_MINUTES : ONE_HOUR, days: ALL_DAYS };
 }
@@ -267,7 +276,7 @@ function loadSummary(list) {
 
 // Class advisory and ancillary tasks that are not tied to a class period; they give way to classes
 const isMovableTask = (entry) =>
-  entry.load_type === "ancillary" || (entry.load_type === "advisory" && entry.subject === CLASS_ADVISORY);
+  entry.load_type === "ancillary" || (entry.load_type === "advisory" && TEACHING_TASKS.includes(entry.subject));
 
 // Latest time up to 5:00 PM, outside lunch, when the teacher is free on every school day for the given
 // minutes, so that tasks sit after classes instead of taking class time
@@ -320,24 +329,7 @@ function readRecessStart() {
 const LUNCH_START = 12 * 60;
 const LUNCH_END = 13 * 60;
 // Lowest grade where teachers exchange classes by subject; below it the adviser teaches the class all day
-const ROTATE_OPTIONS = [
-  { value: "Grade 4", label: "Grades 4–6" },
-  { value: "Grade 5", label: "Grades 5–6" },
-  { value: "Grade 6", label: "Grade 6 only" },
-  { value: "Grade 3", label: "Grades 3–6" },
-  { value: "Grade 1", label: "Grades 1–6" },
-  { value: "none", label: "None (adviser all day)" },
-];
-const ROTATE_STORAGE_KEY = "tl-rotate-from";
-
-function readRotateFrom() {
-  try {
-    const stored = localStorage.getItem(ROTATE_STORAGE_KEY);
-    return ROTATE_OPTIONS.some((option) => option.value === stored) ? stored : "Grade 4";
-  } catch {
-    return "Grade 4";
-  }
-}
+const ROTATE_FROM = "Grade 4";
 
 // Subject groups: Grade 4–6 teachers are placed under the subject they specialize in (table: teacher_specialties)
 const SPECIALTY_TABLE = "teacher_specialties";
@@ -350,9 +342,15 @@ const SPECIALTY_SUBJECTS = [
   "MAPEH",
   "EPP/TLE",
   "GMRC",
+  "ALIVE",
 ];
 // Subject groups cover Grades 4–6 only; the lower grades stay with their adviser
 const SPECIALTY_GRADES = ["Grade 4", "Grade 5", "Grade 6"];
+// The ALIVE group's teachers handle Arabic Language and Islamic Values Education from Grade 1
+const ALIVE_GROUP = "ALIVE";
+const ALIVE_GRADES = ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6"];
+// Grade levels that can be added to a grouped teacher as ones they cover: Grades 4–6, or from Grade 1 for ALIVE
+const groupGrades = (subject) => (subject === ALIVE_GROUP ? ALIVE_GRADES : SPECIALTY_GRADES);
 // Grade 6 TLE is handled by the EPP/TLE group
 const specialtyGroup = (subject) => (subject === "TLE" ? "EPP/TLE" : subject);
 
@@ -361,11 +359,14 @@ const KINDER_SESSIONS = [
   { label: "Afternoon", start: "13:00" },
 ];
 
+// Part of the school but not of this page: they keep their own workload
+const OWN_WORKLOAD = ["ALS"];
 const teachingType = (teacher) => String(teacher.teaching_type || "").trim().toLowerCase();
 
-// One learning area per period: Grades 4–5 take EPP/TLE, Grade 6 takes TLE; special programs are left to the school
+// One learning area per period: Grades 4–5 take EPP/TLE, Grade 6 takes TLE; special programs are left to
+// the school, and ALIVE is scheduled apart as class groups for the ALIVE teachers
 function suggestedSubjects(grade) {
-  const skip = [...SPECIAL_SUBJECTS, grade === "Grade 6" ? "EPP/TLE" : "TLE"];
+  const skip = [...SPECIAL_SUBJECTS, ...ALIVE_SUBJECTS, grade === "Grade 6" ? "EPP/TLE" : "TLE"];
   return (SUBJECTS_BY_GRADE[grade] || []).filter((subject) => !skip.includes(subject));
 }
 
@@ -384,7 +385,7 @@ function buildSuggestedSchedule(teachers, entries, periodOption, rotateFrom, spe
   const busy = {};
   entries.forEach((entry) => { (busy[entry.teacher_id] ||= []).push(entry); });
   const scheduledClasses = new Set(entries.filter((entry) => entry.grade_level).map(classKey));
-  const stats = { classes: 0, skippedClasses: 0, unassigned: 0 };
+  const stats = { classes: 0, skippedClasses: 0, unassigned: 0, aliveClasses: 0, sscClasses: 0 };
 
   // A teacher's day counts everything they are given: classes, class advisory, and ancillary roles.
   // A role therefore takes the place of teaching time instead of being added on top of a full load.
@@ -589,13 +590,25 @@ function buildSuggestedSchedule(teachers, entries, periodOption, rotateFrom, spe
         const specialtyRank = (teacher) => {
           const groups = SPECIALTY_GRADES.includes(grade) ? specialtiesByTeacher[String(teacher.id)] : null;
           if (!groups?.size) return 1;
-          return groups.has(specialtyGroup(subject)) ? 0 : 2;
+          if (!groups.has(specialtyGroup(subject))) return 2;
+          // Grades picked for the teacher in Subject groups limit where they take the subject
+          const grades = groups.get(specialtyGroup(subject));
+          return !grades?.length || grades.includes(grade) ? 0 : 2;
         };
+        // Teachers of another grade who were set to handle this subject in this grade as well
+        const crossGrade = SPECIALTY_GRADES.includes(grade)
+          ? teachers.filter(
+              (candidate) =>
+                !pool.includes(candidate) &&
+                ["adviser", "subject teacher"].includes(teachingType(candidate)) &&
+                specialtiesByTeacher[String(candidate.id)]?.get(specialtyGroup(subject))?.includes(grade),
+            )
+          : [];
         const isAdviser = (teacher) => String(teacher.id) === item.adviserId;
         const lighter = (a, b) => weeklyLoad(String(a.id)) - weeklyLoad(String(b.id));
         // Nobody is taken past 6 hours a day or 30 hours a week: when the grade's own teachers are full,
         // a free teacher from another grade of the same key stage is used, and failing that the period is left without a teacher
-        const ownGrade = pool.filter(available);
+        const ownGrade = [...pool, ...crossGrade].filter(available);
         const candidates = ownGrade.length ? ownGrade : reserveFor(grade).filter((candidate) => !pool.includes(candidate) && available(candidate));
         // A teacher keeps a subject across sections only while that leaves them no more than about
         // one period a day heavier than the lightest free teacher, so loads stay even
@@ -629,6 +642,78 @@ function buildSuggestedSchedule(teachers, entries, periodOption, rotateFrom, spe
         (busy[entry.teacher_id] ||= []).push(entry);
       });
     });
+
+    // A section whose adviser is listed under Special Science Class is an SSC class: its SSC period is put
+    // right after the class's last subject, with the adviser, so it shows in the class program.
+    sections.forEach((item) => {
+      const list = busy[item.adviserId] || [];
+      const index = list.findIndex((entry) => entry.id && entry.load_type === "advisory" && entry.subject === SSC_TASK);
+      if (index === -1) return;
+      const task = list[index];
+      const minutes = duration(task);
+      const others = list.filter((_, position) => position !== index);
+      for (let start = cursor; start + minutes <= 17 * 60; start += 5) {
+        if (start < recessTo && start + minutes > recessFrom) continue;
+        if (start < LUNCH_END && start + minutes > LUNCH_START) continue;
+        const period = { days: task.days, time_start: fromMinutes(start), time_end: fromMinutes(start + minutes) };
+        if (others.some((entry) => overlaps(period, entry))) continue;
+        list[index] = { ...task, ...period, grade_level: grade, section: item.section };
+        moves.push({ id: task.id, time_start: period.time_start, time_end: period.time_end, grade_level: grade, section: item.section });
+        stats.sscClasses += 1;
+        return;
+      }
+    });
+  });
+
+  // ALIVE: the school's ALIVE teachers are filled to a full teaching day (6 hours) with ALIVE class groups
+  // ("ALIVE A", "ALIVE B", …), taking the grades they cover in turn so every grade gets its share. A group has
+  // Arabic Language and Islamic Values Education at the same time, as the two meet on different days.
+  const aliveSections = new Set(scheduledClasses);
+  // The turn carries over from one teacher to the next, so the grades end up with the same number of groups
+  let aliveTurn = 0;
+  teachers.forEach((teacher) => {
+    const id = String(teacher.id);
+    // An ALIVE teacher covers Grades 1–6 unless grade boxes were set for them in the ALIVE subject group
+    const picked = specialtiesByTeacher[id]?.get(ALIVE_GROUP);
+    const grades = picked?.length
+      ? ALIVE_GRADES.filter((grade) => picked.includes(grade))
+      : teachingType(teacher) === "alive" ? ALIVE_GRADES : [];
+    let misses = 0;
+    while (misses < grades.length) {
+      const grade = grades[aliveTurn % grades.length];
+      aliveTurn += 1;
+      const subjects = ALIVE_SUBJECTS
+        .map((subject) => ({ subject, allotment: allotmentFor(grade, subject, periodOption, subjectMinutes) }))
+        .filter((item) => item.allotment);
+      const longest = Math.max(0, ...subjects.map((item) => item.allotment.minutes));
+      let periods = null;
+      for (let start = toMinutes(SUGGESTED_START); longest && !periods && start + longest <= 17 * 60; start += 5) {
+        if (start < LUNCH_END && start + longest > LUNCH_START) continue;
+        if (start < recessTo && start + longest > recessFrom) continue;
+        const tryPeriods = subjects.map(({ subject, allotment }) => ({
+          subject,
+          days: allotment.days,
+          time_start: fromMinutes(start),
+          time_end: fromMinutes(start + allotment.minutes),
+        }));
+        if (tryPeriods.every((period) => !clashes(id, period) && fitsLimits(id, period))) periods = tryPeriods;
+      }
+      if (!periods) {
+        misses += 1;
+        continue;
+      }
+      misses = 0;
+      let letter = 1;
+      while (aliveSections.has(`${grade}|${ALIVE_GROUP} ${String.fromCharCode(64 + letter)}`)) letter += 1;
+      const section = `${ALIVE_GROUP} ${String.fromCharCode(64 + letter)}`;
+      aliveSections.add(`${grade}|${section}`);
+      periods.forEach((period) => {
+        const entry = { teacher_id: id, load_type: "teaching", grade_level: grade, section, ...period, remarks: SUGGESTED_REMARK };
+        planned.push(entry);
+        (busy[id] ||= []).push(entry);
+      });
+      stats.aliveClasses += 1;
+    }
   });
 
   // The reserved class advisory of an adviser whose class was scheduled becomes a real period
@@ -667,7 +752,7 @@ export default function TeachingLoadPage({ user, onLogout, onBack, addToast, sho
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
-  const [rotateFrom, setRotateFrom] = useState(readRotateFrom);
+  const rotateFrom = ROTATE_FROM;
   const [recessStart, setRecessStart] = useState(readRecessStart);
   const [subjectMinutes, setSubjectMinutes] = useState(readSubjectMinutes);
   const [specialties, setSpecialties] = useState([]);
@@ -675,8 +760,11 @@ export default function TeachingLoadPage({ user, onLogout, onBack, addToast, sho
   const [taskMinutes, setTaskMinutes] = useState({});
   const lastMinutes = useRef(DEFAULT_PERIOD_MINUTES);
   const [openConflictId, setOpenConflictId] = useState(null);
-  const [periodOption, setPeriodOption] = useState(readPeriodOption);
+  const periodOption = PERIOD_OPTION;
   const [customSubject, setCustomSubject] = useState(false);
+  const [customSubjects, setCustomSubjects] = useState(readCustomSubjects);
+  const [newSubject, setNewSubject] = useState("");
+  const [newSubjectGrades, setNewSubjectGrades] = useState(SUGGESTED_GRADES);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -708,7 +796,8 @@ export default function TeachingLoadPage({ user, onLogout, onBack, addToast, sho
         return index === -1 ? 99 : index;
       };
       setTeachers(
-        [...(teacherResult.data || [])].sort(
+        // ALS teachers follow their own workload and are kept out of this page
+        (teacherResult.data || []).filter((teacher) => !OWN_WORKLOAD.includes(String(teacher.grade_level || "").toUpperCase()) && !OWN_WORKLOAD.includes(teachingType(teacher).toUpperCase())).sort(
           (a, b) => gradeOrder(a) - gradeOrder(b) || teacherName(a).localeCompare(teacherName(b)),
         ),
       );
@@ -900,6 +989,7 @@ export default function TeachingLoadPage({ user, onLogout, onBack, addToast, sho
   // Assignments tab: class advisory and ancillary tasks, plus any task typed in by hand
   const assignmentTasks = [
     CLASS_ADVISORY,
+    SSC_TASK,
     ...new Set([
       ...ANCILLARY_SUGGESTIONS,
       ...entries.filter((entry) => entry.load_type === "ancillary").map((entry) => entry.subject),
@@ -907,10 +997,43 @@ export default function TeachingLoadPage({ user, onLogout, onBack, addToast, sho
   ];
   const taskEntries = (task) =>
     entries.filter((entry) =>
-      task === CLASS_ADVISORY
-        ? entry.load_type === "advisory" && entry.subject === CLASS_ADVISORY
+      TEACHING_TASKS.includes(task)
+        ? entry.load_type === "advisory" && entry.subject === task
         : entry.load_type === "ancillary" && entry.subject === task,
     );
+  // Assigned teachers listed under their grade level, in grade order then by name
+  const taskGradeGroups = (assigned) => {
+    const groups = new Map();
+    assigned.forEach((entry) => {
+      const raw = entry.grade_level || teacherById[entry.teacher_id]?.grade_level || "";
+      const grade = raw === "SPED" ? "SNED" : raw || "No grade level";
+      if (!groups.has(grade)) groups.set(grade, []);
+      groups.get(grade).push(entry);
+    });
+    const order = (grade) => (GRADE_LEVELS.includes(grade) ? GRADE_LEVELS.indexOf(grade) : 99);
+    return [...groups.entries()]
+      .sort(([a], [b]) => order(a) - order(b) || a.localeCompare(b))
+      .map(([grade, list]) => ({
+        grade,
+        entries: list.sort((a, b) =>
+          teacherName(teacherById[a.teacher_id]).localeCompare(teacherName(teacherById[b.teacher_id])),
+        ),
+      }));
+  };
+
+  // SSC teachers: everyone listed, with their SSC time block when one was given
+  const sscItems = () => {
+    const loads = taskEntries(SSC_TASK);
+    const tags = specialties.filter((row) => row.subject === SSC_TASK);
+    const items = tags.map((tag) => {
+      const load = loads.find((entry) => entry.teacher_id === tag.teacher_id) || null;
+      return { id: `ssc-${tag.id}`, teacher_id: tag.teacher_id, tag, load, grade_level: load?.grade_level, section: load?.section };
+    });
+    loads
+      .filter((entry) => !tags.some((tag) => tag.teacher_id === entry.teacher_id))
+      .forEach((entry) => items.push({ ...entry, tag: null, load: entry }));
+    return items;
+  };
 
   const openTeacher = (key) => {
     setMode("teacher");
@@ -978,7 +1101,7 @@ export default function TeachingLoadPage({ user, onLogout, onBack, addToast, sho
       const next = { ...current, [field]: value };
       // A listed subject that the newly chosen grade does not offer is cleared
       if (field === "grade_level" && !isCustomSubject && next.load_type !== "ancillary") {
-        const offered = [...(SUBJECTS_BY_GRADE[value] || []), ...PROGRAM_SUBJECTS];
+        const offered = subjectsOffered(value);
         if (!offered.includes(next.subject)) next.subject = "";
       }
       if (next.load_type === "ancillary" || !next.time_start) return next;
@@ -1017,23 +1140,44 @@ export default function TeachingLoadPage({ user, onLogout, onBack, addToast, sho
     }
   };
 
-  const changeRotateFrom = (value) => {
-    setRotateFrom(value);
+  const saveCustomSubjects = (next) => {
+    setCustomSubjects(next);
     try {
-      localStorage.setItem(ROTATE_STORAGE_KEY, value);
+      localStorage.setItem(CUSTOM_SUBJECTS_STORAGE_KEY, JSON.stringify(next));
     } catch {
-      // The choice still applies for this session
+      // The subjects still apply for this session
     }
   };
 
-  const changePeriodOption = (value) => {
-    setPeriodOption(value);
-    try {
-      localStorage.setItem(PERIOD_OPTION_STORAGE_KEY, value);
-    } catch {
-      // The choice still applies for this session
+  const addCustomSubject = (event) => {
+    event.preventDefault();
+    const name = newSubject.trim().replace(/\s+/g, " ");
+    if (!name) return addToast("Type the name of the subject.", "warning");
+    if (!newSubjectGrades.length) return addToast("Tick at least one grade level for the subject.", "warning");
+    const taken = [...Object.values(SUBJECTS_BY_GRADE).flat(), ...PROGRAM_SUBJECTS, ...customSubjects.map((item) => item.name)];
+    if (taken.some((item) => item.toLowerCase() === name.toLowerCase())) {
+      return addToast(`${name} is already in the subject list.`, "warning");
     }
+    saveCustomSubjects([...customSubjects, { name, grades: GRADE_LEVELS.filter((grade) => newSubjectGrades.includes(grade)) }]);
+    setNewSubject("");
+    addToast(`${name} added to the subject list.`, "success");
   };
+
+  const toggleCustomSubjectGrade = (name, grade) =>
+    saveCustomSubjects(
+      customSubjects.map((item) =>
+        item.name !== name
+          ? item
+          : { ...item, grades: item.grades.includes(grade) ? item.grades.filter((value) => value !== grade) : [...item.grades, grade] },
+      ),
+    );
+
+  // Subjects a grade offers: the official list, the program subjects, then the school's own
+  const subjectsOffered = (grade) => [
+    ...(SUBJECTS_BY_GRADE[grade] || []),
+    ...PROGRAM_SUBJECTS,
+    ...customSubjects.filter((item) => item.grades.includes(grade)).map((item) => item.name),
+  ];
 
   const toggleDay = (code) =>
     setForm((current) => ({
@@ -1121,7 +1265,10 @@ export default function TeachingLoadPage({ user, onLogout, onBack, addToast, sho
 
   const suggestSchedule = async () => {
     const specialtiesByTeacher = {};
-    specialties.forEach((row) => { (specialtiesByTeacher[row.teacher_id] ||= new Set()).add(row.subject); });
+    // Subject → grades the teacher takes it in (empty: no grade picked, so any Grade 4–6 class)
+    specialties.filter((row) => SPECIALTY_SUBJECTS.includes(row.subject)).forEach((row) => {
+      (specialtiesByTeacher[row.teacher_id] ||= new Map()).set(row.subject, row.grade_levels || []);
+    });
     const plan = buildSuggestedSchedule(teachers, entries, periodOption, rotateFrom, specialtiesByTeacher, recessStart, subjectMinutes);
     if (!plan.planned.length) {
       addToast(
@@ -1137,6 +1284,9 @@ export default function TeachingLoadPage({ user, onLogout, onBack, addToast, sho
       `Suggest a schedule for SY ${schoolYear}?\n\n` +
         `${plan.planned.length} periods will be added for ${plan.classes} class${plan.classes === 1 ? "" : "es"} and ${plan.teachers} teacher${plan.teachers === 1 ? "" : "s"}, starting ${formatTime(SUGGESTED_START)}.` +
         (plan.skippedClasses ? `\n${plan.skippedClasses} class${plan.skippedClasses === 1 ? "" : "es"} already scheduled will be left as is.` : "") +
+        (plan.aliveClasses ? `\nALIVE (Arabic Language and Islamic Values Education) will be added as ${plan.aliveClasses} class group${plan.aliveClasses === 1 ? "" : "s"}, filling each ALIVE teacher up to 6 hours a day.` : "") +
+        (plan.sscClasses ? `
+The Special Science Class period will be placed after the last subject of ${plan.sscClasses} SSC class${plan.sscClasses === 1 ? "" : "es"}, with the adviser.` : "") +
         (plan.advisories.length ? `\nClass Advisory, one hour a day counted as teaching load, will be added for ${plan.advisories.length} adviser${plan.advisories.length === 1 ? "" : "s"}.` : "") +
         (plan.moves.length ? `
 ${plan.moves.length} class advisory or ancillary assignment${plan.moves.length === 1 ? "" : "s"} will be moved to the end of the day.` : "") +
@@ -1168,9 +1318,29 @@ ${plan.moves.length} class advisory or ancillary assignment${plan.moves.length =
 
   // Gives a task to a teacher at their latest free time, after classes; the time can be changed from the teacher's program
   const assignTask = async (task, teacherId) => {
+    // SSC: the teacher is listed (kept in teacher_specialties) with no load of their own; a time block is
+    // added as teaching load only when minutes are entered for it
+    if (task === SSC_TASK) {
+      if (!specialties.some((row) => row.subject === SSC_TASK && row.teacher_id === teacherId)) {
+        const { data, error: tagError } = await supabase
+          .from(SPECIALTY_TABLE)
+          .insert({ teacher_id: teacherId, subject: SSC_TASK, created_by: user?.email || null })
+          .select()
+          .single();
+        if (tagError) {
+          addToast(tagError.message || `Could not add ${teacherName(teacherById[teacherId])} to ${task}.`, "error", 5000);
+          return;
+        }
+        setSpecialties((current) => [...current, { ...data, teacher_id: String(data.teacher_id) }]);
+      }
+      if (!(Number(taskMinutes[task]) > 0)) {
+        addToast(`${teacherName(teacherById[teacherId])} added to ${task}.`, "success");
+        return;
+      }
+    }
     const minutes = Math.min(Math.max(Number(taskMinutes[task]) || DEFAULT_TASK_MINUTES, 5), 240);
-    // Class advisory is teaching load: past 6 hours a day it becomes teaching overload, capped at 2 hours
-    if (task === CLASS_ADVISORY) {
+    // Class advisory and SSC are teaching load: past 6 hours a day it becomes teaching overload, capped at 2 hours
+    if (TEACHING_TASKS.includes(task)) {
       const after = loadSummary([
         ...(entriesByTeacher[teacherId] || []),
         { load_type: "advisory", days: ALL_DAYS, time_start: "00:00", time_end: fromMinutes(minutes) },
@@ -1196,7 +1366,7 @@ Assign it anyway?`,
     const { error: insertError } = await supabase.from(TABLE).insert({
       school_year: schoolYear,
       teacher_id: teacherId,
-      load_type: task === CLASS_ADVISORY ? "advisory" : "ancillary",
+      load_type: TEACHING_TASKS.includes(task) ? "advisory" : "ancillary",
       subject: task,
       ...slot,
       created_by: user?.email || null,
@@ -1207,6 +1377,23 @@ Assign it anyway?`,
     }
     addToast(`${task} assigned to ${teacherName(teacherById[teacherId])}, ${formatTime(slot.time_start)}–${formatTime(slot.time_end)}.`, "success");
     await loadData();
+  };
+
+  // Removes a teacher from SSC: their listing and, if minutes were given, the SSC time block
+  const removeSsc = async (item) => {
+    const confirmed = await showConfirm(`Remove ${teacherName(teacherById[item.teacher_id])} from ${SSC_TASK}?`);
+    if (!confirmed) return;
+    if (item.tag) {
+      const { error: tagError } = await supabase.from(SPECIALTY_TABLE).delete().eq("id", item.tag.id);
+      if (tagError) return addToast(tagError.message || "Could not remove the teacher.", "error", 5000);
+      setSpecialties((current) => current.filter((row) => row.id !== item.tag.id));
+    }
+    if (item.load) {
+      const { error: loadError } = await supabase.from(TABLE).delete().eq("id", item.load.id);
+      if (loadError) return addToast(loadError.message || "Could not remove the SSC time.", "error", 5000);
+      await loadData();
+    }
+    addToast(`${teacherName(teacherById[item.teacher_id])} removed from ${SSC_TASK}.`, "success");
   };
 
   const addSpecialty = async (subject, teacherId) => {
@@ -1220,6 +1407,48 @@ Assign it anyway?`,
       return;
     }
     setSpecialties((current) => [...current, { ...data, teacher_id: String(data.teacher_id) }]);
+  };
+
+  // Grades a grouped teacher handles the subject in; their own grade until others are picked
+  const specialtyGrades = (row) => {
+    const allowed = groupGrades(row.subject);
+    const picked = allowed.filter((grade) => (row.grade_levels || []).includes(grade));
+    if (picked.length) return picked;
+    const own = teacherById[row.teacher_id]?.grade_level;
+    return allowed.includes(own) ? [own] : [];
+  };
+
+  // Who can be added to a subject group: Grade 4–6 advisers and every subject teacher; ALIVE teachers for ALIVE
+  const canJoinGroup = (teacher, subject) =>
+    subject === ALIVE_GROUP
+      ? teachingType(teacher) === "alive"
+      : teachingType(teacher) === "subject teacher" ||
+        (teachingType(teacher) === "adviser" && SPECIALTY_GRADES.includes(teacher.grade_level));
+
+  const toggleSpecialtyGrade = async (row, grade) => {
+    const current = specialtyGrades(row);
+    const next = current.includes(grade) ? current.filter((value) => value !== grade) : [...current, grade];
+    if (!next.length) {
+      return addToast("A teacher needs at least one grade level. Use × to remove them from the subject.", "warning");
+    }
+    const gradeLevels = groupGrades(row.subject).filter((value) => next.includes(value));
+    const { data, error: updateError } = await supabase
+      .from(SPECIALTY_TABLE)
+      .update({ grade_levels: gradeLevels })
+      .eq("id", row.id)
+      .select()
+      .maybeSingle();
+    if (updateError || !data) {
+      addToast(
+        !data || ["42703", "PGRST204", "42501"].includes(updateError?.code)
+          ? "Grade levels per teacher are not ready. Run supabase-teacher-specialties-grade-levels.sql in the Supabase SQL Editor."
+          : updateError.message || "Could not save the grade levels.",
+        "error",
+        6000,
+      );
+      return;
+    }
+    setSpecialties((list) => list.map((item) => (item.id === row.id ? { ...item, grade_levels: gradeLevels } : item)));
   };
 
   const removeSpecialty = async (row) => {
@@ -1257,7 +1486,7 @@ Assign it anyway?`,
   const subjectOptions =
     form.load_type === "ancillary"
       ? ANCILLARY_SUGGESTIONS
-      : [...(SUBJECTS_BY_GRADE[form.grade_level] || []), ...PROGRAM_SUBJECTS];
+      : subjectsOffered(form.grade_level);
   // A saved subject that is not in the list (typed earlier) also shows as "Other"
   const isCustomSubject = customSubject || Boolean(form.subject && !subjectOptions.includes(form.subject));
 
@@ -1273,7 +1502,7 @@ Assign it anyway?`,
   const hasSelection = Boolean(selectedTeacher || selectedClass);
   const tableReady = !error || teachers.length > 0;
   // Summary and subject groups use the full width, without the teacher/class list
-  const wide = mode === "summary" || mode === "groups" || mode === "tasks" || mode === "minutes";
+  const wide = mode === "summary" || mode === "groups" || mode === "tasks" || mode === "minutes" || mode === "subjects";
 
   return (
     <div className="tl-root">
@@ -1287,6 +1516,7 @@ Assign it anyway?`,
           <button type="button" className={mode === "groups" ? "active" : ""} onClick={() => switchMode("groups")}>Subject groups</button>
           <button type="button" className={mode === "tasks" ? "active" : ""} onClick={() => switchMode("tasks")}>Assignments</button>
           <button type="button" className={mode === "minutes" ? "active" : ""} onClick={() => switchMode("minutes")}>Time allotment</button>
+          <button type="button" className={mode === "subjects" ? "active" : ""} onClick={() => switchMode("subjects")}>Subjects</button>
         </div>
         <div className="tl-toolbar-spacer" />
         <button type="button" className="tl-button" onClick={loadData} disabled={loading}>Refresh</button>
@@ -1312,18 +1542,6 @@ Assign it anyway?`,
           <span>School Year</span>
           <select value={schoolYear} onChange={(event) => { setSchoolYear(event.target.value); closeForm(); }}>
             {schoolYearOptions().map((year) => <option key={year} value={year}>{year}</option>)}
-          </select>
-        </label>
-        <label className="tl-sy" title="Sets the time and days filled in when you pick a subject. Uniform lengths apply to Grades 4–6.">
-          <span>Period length</span>
-          <select value={periodOption} onChange={(event) => changePeriodOption(event.target.value)}>
-            {PERIOD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </label>
-        <label className="tl-sy" title="Used by Suggest schedule. In these grades each subject has its own teacher who goes to every section; in the lower grades the adviser teaches the class all day.">
-          <span>Subject teachers in</span>
-          <select value={rotateFrom} onChange={(event) => changeRotateFrom(event.target.value)}>
-            {ROTATE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
         <label className="tl-sy" title="Recess is 20 minutes. It is shown in every class program, and Suggest schedule keeps periods out of it.">
@@ -1710,14 +1928,14 @@ Assign it anyway?`,
               <header className="tl-sheet-heading">
                 <div>
                   <h1>Subject groups</h1>
-                  <p>For Grades 4–6 only. Put each teacher under the subject they specialize in, and Suggest schedule gives that subject to its group. Kinder to Grade 3 stay with their adviser.</p>
+                  <p>Put each teacher under the subject they specialize in, then click the grade boxes to mark every grade level they cover. Suggest schedule gives a Grade 4–6 subject to its group; Kinder to Grade 3 stay with their adviser. ALIVE covers Arabic Language and Islamic Values Education from Grade 1: Suggest schedule fills each ALIVE teacher to 6 hours a day with ALIVE class groups across the grades they cover; add them to the ALIVE row only to limit those grades.</p>
                 </div>
                 <dl className="tl-stats">
-                  <div><dt>Teachers grouped</dt><dd>{new Set(specialties.filter((row) => SPECIALTY_SUBJECTS.includes(row.subject)).map((row) => row.teacher_id)).size} of {teachers.filter((teacher) => SPECIALTY_GRADES.includes(teacher.grade_level)).length}</dd></div>
+                  <div><dt>Teachers grouped</dt><dd>{new Set(specialties.filter((row) => SPECIALTY_SUBJECTS.includes(row.subject)).map((row) => row.teacher_id)).size} of {teachers.filter((teacher) => SPECIALTY_SUBJECTS.some((subject) => canJoinGroup(teacher, subject))).length}</dd></div>
                 </dl>
               </header>
               {specialtyNotice && <div className="tl-warning">{specialtyNotice}</div>}
-              <table className="tl-table tl-groups">
+              <table className="tl-table tl-groups tl-tasks">
                 <thead>
                   <tr>
                     <th>Subject</th>
@@ -1728,17 +1946,46 @@ Assign it anyway?`,
                 <tbody>
                   {SPECIALTY_SUBJECTS.map((subject) => {
                     const members = specialties.filter((row) => row.subject === subject);
+                    // A teacher is listed once, under their own grade level; the grade boxes show every grade they cover
+                    const listed = members;
                     return (
                       <tr key={subject}>
                         <td className="nowrap"><strong>{subject}</strong></td>
                         <td>
                           {members.length === 0 && <span className="tl-muted">No teacher assigned</span>}
-                          {members.map((row) => (
-                            <span className="tl-chip" key={row.id}>
-                              {teacherName(teacherById[row.teacher_id])}
-                              {teacherById[row.teacher_id]?.grade_level && <small>{teacherById[row.teacher_id].grade_level}</small>}
-                              <button type="button" aria-label={`Remove ${teacherName(teacherById[row.teacher_id])} from ${subject}`} title="Remove from this subject" onClick={() => removeSpecialty(row)}>×</button>
-                            </span>
+                          {taskGradeGroups(listed).map((group) => (
+                            <div className="tl-task-group" key={group.grade}>
+                              <div className="tl-task-grade">
+                                {group.grade}
+                                <small>{group.entries.length}</small>
+                              </div>
+                              <ul className="tl-task-list">
+                                {group.entries.map((row) => (
+                                  <li key={row.id}>
+                                    <span className="tl-task-name" title={teacherName(teacherById[row.teacher_id])}>{teacherName(teacherById[row.teacher_id])}</span>
+                                    {teacherById[row.teacher_id]?.teaching_position && <small>{teacherById[row.teacher_id].teaching_position}</small>}
+                                    <span className="tl-grade-pick" role="group" aria-label={`Grade levels ${teacherName(teacherById[row.teacher_id])} covers for ${subject}`}>
+                                      {groupGrades(subject).map((grade) => {
+                                        const on = specialtyGrades(row).includes(grade);
+                                        return (
+                                          <button
+                                            type="button"
+                                            key={grade}
+                                            className={on ? "on" : ""}
+                                            aria-pressed={on}
+                                            title={on ? `Covers ${grade}. Click to remove this grade.` : `Add ${grade} to the grades this teacher covers`}
+                                            onClick={() => toggleSpecialtyGrade(row, grade)}
+                                          >
+                                            {grade.replace("Grade ", "G")}
+                                          </button>
+                                        );
+                                      })}
+                                    </span>
+                                    <button type="button" aria-label={`Remove ${teacherName(teacherById[row.teacher_id])} from ${subject}`} title="Remove from this subject" onClick={() => removeSpecialty(row)}>×</button>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           ))}
                         </td>
                         <td className="tl-col-add">
@@ -1749,9 +1996,9 @@ Assign it anyway?`,
                             onChange={(event) => event.target.value && addSpecialty(subject, event.target.value)}
                           >
                             <option value="">Add teacher…</option>
-                            {teachers.filter((teacher) => SPECIALTY_GRADES.includes(teacher.grade_level) && !groupedTeacherIds.has(String(teacher.id))).map((teacher) => (
+                            {teachers.filter((teacher) => canJoinGroup(teacher, subject) && !groupedTeacherIds.has(String(teacher.id))).map((teacher) => (
                               <option key={teacher.id} value={String(teacher.id)}>
-                                {teacherName(teacher)}{teacher.grade_level ? ` · ${teacher.grade_level}` : ""}
+                                {[teacherName(teacher), teacher.teaching_type, teacher.grade_level !== teacher.teaching_type && teacher.grade_level].filter(Boolean).join(" · ")}
                               </option>
                             ))}
                           </select>
@@ -1835,15 +2082,106 @@ Assign it anyway?`,
             </section>
           )}
 
+          {!loading && tableReady && mode === "subjects" && (
+            <section className="tl-sheet">
+              <header className="tl-sheet-heading">
+                <div>
+                  <h1>Subjects</h1>
+                  <p>Every subject you can pick when adding a period, and the grades that offer it. Add the school's own subjects here; tick or untick a grade to change where a custom subject is offered.</p>
+                </div>
+              </header>
+              <form className="tl-subject-add" onSubmit={addCustomSubject}>
+                <input
+                  value={newSubject}
+                  maxLength={120}
+                  onChange={(event) => setNewSubject(event.target.value)}
+                  placeholder="Custom subject name"
+                  aria-label="Custom subject name"
+                />
+                <div className="tl-subject-grades" role="group" aria-label="Grades that offer the subject">
+                  {GRADE_LEVELS.map((grade) => (
+                    <label key={grade}>
+                      <input
+                        type="checkbox"
+                        checked={newSubjectGrades.includes(grade)}
+                        onChange={() =>
+                          setNewSubjectGrades((current) =>
+                            current.includes(grade) ? current.filter((value) => value !== grade) : [...current, grade],
+                          )
+                        }
+                      />
+                      {grade}
+                    </label>
+                  ))}
+                </div>
+                <button type="submit" className="tl-button primary">+ Add subject</button>
+              </form>
+              <table className="tl-table tl-minutes-table tl-subjects">
+                <thead>
+                  <tr>
+                    <th>Subject</th>
+                    {GRADE_LEVELS.map((grade) => <th key={grade} className="num">{grade}</th>)}
+                    <th className="tl-col-actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...new Set(GRADE_LEVELS.flatMap((grade) => SUBJECTS_BY_GRADE[grade] || []))].map((subject) => (
+                    <tr key={subject}>
+                      <td><strong>{subject}</strong></td>
+                      {GRADE_LEVELS.map((grade) => (
+                        <td key={grade} className="num">
+                          {(SUBJECTS_BY_GRADE[grade] || []).includes(subject) ? <span className="tl-offered">✓</span> : <span className="tl-muted">—</span>}
+                        </td>
+                      ))}
+                      <td className="tl-col-actions" />
+                    </tr>
+                  ))}
+                  {PROGRAM_SUBJECTS.map((subject) => (
+                    <tr key={subject}>
+                      <td><strong>{subject}</strong><small className="tl-muted"> · program</small></td>
+                      {GRADE_LEVELS.map((grade) => <td key={grade} className="num"><span className="tl-offered">✓</span></td>)}
+                      <td className="tl-col-actions" />
+                    </tr>
+                  ))}
+                  {customSubjects.map((item) => (
+                    <tr key={item.name}>
+                      <td><strong>{item.name}</strong><small className="tl-muted"> · custom</small></td>
+                      {GRADE_LEVELS.map((grade) => (
+                        <td key={grade} className="num">
+                          <input
+                            type="checkbox"
+                            aria-label={`${item.name} offered in ${grade}`}
+                            checked={item.grades.includes(grade)}
+                            onChange={() => toggleCustomSubjectGrade(item.name, grade)}
+                          />
+                        </td>
+                      ))}
+                      <td className="tl-col-actions">
+                        <button
+                          type="button"
+                          className="danger"
+                          title="Remove from the subject list. Periods already saved with this subject are kept."
+                          onClick={() => saveCustomSubjects(customSubjects.filter((value) => value.name !== item.name))}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+
           {!loading && tableReady && mode === "tasks" && (
             <section className="tl-sheet">
               <header className="tl-sheet-heading">
                 <div>
                   <h1>Assignments</h1>
-                  <p>Class advisory and ancillary tasks for SY {schoolYear}. Each is placed after the teacher's classes, at their latest free time before 5:00 PM, and counted in their workload. Class advisory counts as teaching load, one hour a day.</p>
+                  <p>Class advisory and ancillary tasks for SY {schoolYear}. Each is placed after the teacher's classes, at their latest free time before 5:00 PM, and counted in their workload. Class advisory counts as teaching load, one hour a day. Special Science Class (SSC) lists its teachers with no added load. Enter minutes per day only if the school gives SSC extra time: it is then added as teaching load, and Suggest schedule puts it in the adviser's class right after its last subject.</p>
                 </div>
               </header>
-              <table className="tl-table tl-groups">
+              <table className="tl-table tl-groups tl-tasks">
                 <thead>
                   <tr>
                     <th>Assignment</th>
@@ -1854,22 +2192,35 @@ Assign it anyway?`,
                 </thead>
                 <tbody>
                   {assignmentTasks.map((task) => {
-                    const assigned = taskEntries(task);
+                    const assigned = task === SSC_TASK ? sscItems() : taskEntries(task);
                     const assignedIds = new Set(assigned.map((entry) => entry.teacher_id));
                     return (
                       <tr key={task}>
                         <td>
                           <strong>{task}</strong>
-                          {task === CLASS_ADVISORY && <small className="tl-muted"> · teaching load</small>}
+                          {TEACHING_TASKS.includes(task) && <small className="tl-muted"> · teaching load</small>}
                         </td>
                         <td>
                           {assigned.length === 0 && <span className="tl-muted">No teacher assigned</span>}
-                          {assigned.map((entry) => (
-                            <span className="tl-chip" key={entry.id}>
-                              {teacherName(teacherById[entry.teacher_id])}
-                              <small>{duration(entry)} min · {formatDays(entry.days)} · {formatTime(entry.time_start)}</small>
-                              <button type="button" aria-label={`Remove ${task} from ${teacherName(teacherById[entry.teacher_id])}`} title="Remove this assignment" onClick={() => deleteEntry(entry)}>×</button>
-                            </span>
+                          {taskGradeGroups(assigned).map((group) => (
+                            <div className="tl-task-group" key={group.grade}>
+                              <div className="tl-task-grade">
+                                {group.grade}
+                                <small>{group.entries.length}</small>
+                              </div>
+                              <ul className="tl-task-list">
+                                {group.entries.map((entry) => (
+                                  <li key={entry.id}>
+                                    <span className="tl-task-name" title={teacherName(teacherById[entry.teacher_id])}>{teacherName(teacherById[entry.teacher_id])}</span>
+                                    {(() => {
+                                      const load = task === SSC_TASK ? entry.load : entry;
+                                      return <small>{load ? [load.section, `${duration(load)} min`, formatDays(load.days), formatTime(load.time_start)].filter(Boolean).join(" · ") : "No added load"}</small>;
+                                    })()}
+                                    <button type="button" aria-label={`Remove ${task} from ${teacherName(teacherById[entry.teacher_id])}`} title="Remove this assignment" onClick={() => (task === SSC_TASK ? removeSsc(entry) : deleteEntry(entry))}>×</button>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           ))}
                         </td>
                         <td className="num">
@@ -1880,7 +2231,8 @@ Assign it anyway?`,
                             max={240}
                             step={5}
                             aria-label={`Minutes per day for ${task}`}
-                            value={taskMinutes[task] ?? DEFAULT_TASK_MINUTES}
+                            placeholder={task === SSC_TASK ? "—" : undefined}
+                            value={taskMinutes[task] ?? (task === SSC_TASK ? "" : DEFAULT_TASK_MINUTES)}
                             onChange={(event) => setTaskMinutes((current) => ({ ...current, [task]: event.target.value }))}
                           />
                         </td>
