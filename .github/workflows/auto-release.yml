@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
 jobs:
   auto-tag-and-release:
     name: Build & Auto Publish Release
@@ -56,15 +60,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cmd /c "gh release view $env:VERSION --repo jaybhee84/ieces-admin-portal >nul 2>nul"
-          $releaseExists = $LASTEXITCODE -eq 0
-          $global:LASTEXITCODE = 0
-          if ($releaseExists) {
+          # List releases instead of "gh release view" so drafts left by a failed run are seen too
+          $json = gh api "repos/jaybhee84/ieces-admin-portal/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw "Could not list releases." }
+          $matching = @(($json | ConvertFrom-Json) | Where-Object { $_.tag_name -eq $env:VERSION })
+          $published = @($matching | Where-Object { -not $_.draft })
+          if ($published.Count -gt 0) {
             [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exists=true`n")
             Write-Host "Release $env:VERSION already exists. Skipping release build."
           } else {
             [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exists=false`n")
-            Write-Host "Release $env:VERSION does not exist. Building and publishing it."
+            if ($matching.Count -gt 0) {
+              [System.IO.File]::AppendAllText($env:GITHUB_ENV, "RELEASE_ID=$($matching[0].id)`n")
+              Write-Host "Draft release $env:VERSION found from an earlier run. Reusing it."
+            } else {
+              Write-Host "Release $env:VERSION does not exist. Building and publishing it."
+            }
           }
 
       - name: Push Git Tag
@@ -84,8 +95,45 @@ jobs:
         if: steps.check_release.outputs.exists == 'false'
         run: npm run build
 
-      - name: Build and Publish Electron App
+      # electron-builder uploads the installer and blockmap in parallel, and each upload
+      # creates its own release when none exists yet, which splits the assets across two
+      # releases with the same tag. Creating the draft first gives both uploads one target.
+      - name: Create Draft Release
+        if: steps.check_release.outputs.exists == 'false' && env.RELEASE_ID == ''
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $name = $env:VERSION.TrimStart("v")
+          $json = gh api "repos/jaybhee84/ieces-admin-portal/releases" -f "tag_name=$env:VERSION" -f "name=$name" -F "draft=true"
+          if ($LASTEXITCODE -ne 0) { throw "Could not create draft release $env:VERSION." }
+          $id = ($json | ConvertFrom-Json).id
+          [System.IO.File]::AppendAllText($env:GITHUB_ENV, "RELEASE_ID=$id`n")
+
+      - name: Build and Upload Electron App
         if: steps.check_release.outputs.exists == 'false'
         run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Assets and Publish Release
+        if: steps.check_release.outputs.exists == 'false'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $json = gh api "repos/jaybhee84/ieces-admin-portal/releases/$env:RELEASE_ID/assets"
+          if ($LASTEXITCODE -ne 0) { throw "Could not list assets of release $env:VERSION." }
+          $names = @(($json | ConvertFrom-Json) | ForEach-Object { $_.name })
+          Write-Host "Uploaded assets: $($names -join ', ')"
+          # The auto-updater needs all three; publishing without one breaks updates
+          $missing = @()
+          if (-not ($names -contains "latest.yml")) { $missing += "latest.yml" }
+          if (-not ($names -like "*.exe")) { $missing += "installer (.exe)" }
+          if (-not ($names -like "*.exe.blockmap")) { $missing += "blockmap (.exe.blockmap)" }
+          if ($missing.Count -gt 0) {
+            throw "Release $env:VERSION is missing: $($missing -join ', '). Left as draft."
+          }
+          gh api -X PATCH "repos/jaybhee84/ieces-admin-portal/releases/$env:RELEASE_ID" -F "draft=false" -f "make_latest=true" | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "Could not publish release $env:VERSION." }
+          Write-Host "Published release $env:VERSION."
